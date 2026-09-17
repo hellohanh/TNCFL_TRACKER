@@ -1019,6 +1019,7 @@ let LIVE_WK = 0;     // Entry 112 (2026-09-09): completed/locked weeks PLUS the 
                       // See fetchESPNData() for how this is computed.
 let WK_TRANS  = [];
 let WK_TRADES = [];
+let TRANS_BY_MANAGER_WK = {}; // { managerName: { wk: {trans, trades} } } — Entry 270, feeds computeRecapStandings()
 const FAAB_BUDGET = 1000; // starting free-agent acquisition budget per manager (Entry 120, 2026-09-09)
 let FAAB_SPENT = {};      // managerName -> total $ spent on waiver bids this season
 let PLAYER_NAME_MAP = {}; // playerId -> {name, proTeamId, positionId} (Entry 122/123, resolved via mRoster; ADD-side only, dropped players unresolvable)
@@ -1132,6 +1133,18 @@ function parseTransactionsByWeek(transData) {
   const size = Math.max(0, maxWk + 1); // +1 since index 0 (Week 00) is a valid slot
   const wkTrans  = Array(size).fill(0);
   const wkTrades = Array(size).fill(0);
+  // Entry 270 (session S048): per-manager, per-week breakdown — same loop,
+  // same already-verified data, just also keyed by manager for the Generate
+  // Recap tool's week-scoped standings block (computeRecapStandings below).
+  // MANAGERS[i].trans/.trades are ESPN's own LIVE season-to-date counters
+  // (mTeam's transactionCounter) — no way to ask ESPN for "as of week W";
+  // this is the only source for a real historical per-manager count.
+  const perManagerWk = {}; // { managerName: { wk: {trans, trades} } }
+  const bump = (name, wk, field) => {
+    if (!perManagerWk[name]) perManagerWk[name] = {};
+    if (!perManagerWk[name][wk]) perManagerWk[name][wk] = { trans: 0, trades: 0 };
+    perManagerWk[name][wk][field]++;
+  };
 
   // Diagnostic (Entry 219, session S046): Entry 218's falsy-zero fix didn't
   // resolve WK 00 staying at 0 — rather than guess a second fix blind, log
@@ -1182,14 +1195,15 @@ function parseTransactionsByWeek(transData) {
     const idx = effectiveTxWeek(wk, t.proposedDate);
     diagRows.push({ type: t.type, scoringPeriodId: wk, proposedDate: t.proposedDate, status: t.status, rangeFiltered: false, idx });
     if (idx < 0 || idx >= size) return;
+    const managerName = ESPN_ID_MAP[t.teamId] ? ESPN_ID_MAP[t.teamId].name : null;
     (t.items || []).forEach(item => {
-      if (item.type === 'ADD')   wkTrans[idx]++;
-      if (item.type === 'TRADE') wkTrades[idx]++;
+      if (item.type === 'ADD')   { wkTrans[idx]++;  if (managerName) bump(managerName, idx, 'trans'); }
+      if (item.type === 'TRADE') { wkTrades[idx]++; if (managerName) bump(managerName, idx, 'trades'); }
     });
   });
   console.table(diagRows);
 
-  return { wkTrans, wkTrades };
+  return { wkTrans, wkTrades, perManagerWk };
 }
 
 // ── FAAB BUDGET PARSER (Entry 120, 2026-09-09) ──────────────────────────
@@ -1675,6 +1689,7 @@ async function fetchESPNData() {
         const parsed = parseTransactionsByWeek(transData);
         WK_TRANS  = parsed.wkTrans;
         WK_TRADES = parsed.wkTrades;
+        TRANS_BY_MANAGER_WK = parsed.perManagerWk;
 
         // FAAB budget (Entry 120) — reuses this same transData, no extra fetch.
         const spentByTeamId = parseFaabSpent(transData);
@@ -5243,6 +5258,88 @@ const STORYLINE_THEME_MAP = {
 // (rank jumps/drops, #1 changes, money-circle crossings, margin-record
 // framing, and drought math all confirmed correct against manually
 // recomputed totals for a 10-manager/3-week scenario).
+// Entry 270 (session S048): each manager's full standings row (points,
+// trans, trades, HMOTW tally, net $) AS OF a specific past week — not the
+// live/current state. Built after two separate transcription mistakes in
+// the Week 1 recap's closing block, both traced to hand-copying numbers off
+// a screenshot of the LIVE Money/Score tabs (current season-to-date state,
+// not "as of week W"). Mirrors buildSalRows()'s exact fee methodology
+// (including Entry 95's "full commitment from day 1" philosophy — buyin/
+// sidebet/HMOTW fee are owed in full regardless of week, with future weeks'
+// HMOTW fee still projected at the regular rate) so these numbers are
+// internally consistent with the live Money tab's own math, just correctly
+// scoped to `wk` instead of `TOTAL_WKS`. Transaction/trade counts come from
+// `TRANS_BY_MANAGER_WK` (Entry 270's other half) — ESPN's own per-manager
+// counters are always live/current with no historical equivalent, so this
+// is the only real source for "as of week W" counts.
+function computeRecapStandings(wk) {
+  const n = MANAGERS.length;
+  const tal = new Array(n).fill(0);
+  const hm = new Array(n).fill(0);
+  const hmcost = new Array(n).fill(0);
+
+  for (let w = 0; w < wk; w++) {
+    const scores = MANAGERS.map(m => m.pts[w]);
+    const maxScore = Math.max(...scores);
+    const winners = scores.reduce((acc, s, i) => { if (s === maxScore) acc.push(i); return acc; }, []);
+    const isDH = maxScore >= RULES.dhmotw_threshold;
+    const weekFee = isDH ? RULES.hmotw_fee * 2 : RULES.hmotw_fee;
+    const pot = weekFee * n;
+    for (let i = 0; i < n; i++) hmcost[i] += weekFee;
+    const isTie = winners.length > 1;
+    const credit = isDH ? (isTie ? 1.0 : 2.0) : (isTie ? 0.5 : 1.0);
+    const share = pot / winners.length;
+    winners.forEach(i => { hm[i] += share; tal[i] += credit; });
+  }
+
+  // Same Entry-95 "full commitment" projection as buildSalRows(), anchored
+  // to `wk` instead of TOTAL_WKS.
+  const remainingWks = Math.max(0, 18 - wk);
+  const hmcostFull = hmcost.map(c => c + remainingWks * RULES.hmotw_fee);
+
+  const cumTransTrades = (name) => {
+    const byWk = TRANS_BY_MANAGER_WK[name] || {};
+    let trans = 0, trades = 0;
+    Object.keys(byWk).forEach(w2 => {
+      if (Number(w2) <= wk - 1) { trans += byWk[w2].trans; trades += byWk[w2].trades; }
+    });
+    return { trans, trades };
+  };
+
+  let rows = MANAGERS.map((m, i) => {
+    const { trans, trades } = cumTransTrades(m.name);
+    const inSidebet = RULES.sidebet_participants.includes(m.name);
+    const sbi = inSidebet ? RULES.sidebet_buyin : 0;
+    const inPlayoff = RULES.playoff_participants.includes(m.name);
+    const poi = (wk >= 11 && inPlayoff) ? RULES.playoff_buyin : 0;
+    const trans_fee = trans * RULES.trans_fee;
+    const trade_fee = trades * RULES.trade_fee;
+    const points = CUM_TOTALS[i][wk - 1];
+    const net = hm[i] - (RULES.buyin + sbi + poi + hmcostFull[i] + trans_fee + trade_fee);
+    return { name: m.name, points, trans, trades, tal: tal[i], net };
+  });
+
+  rows.sort((a, b) => (b.points - a.points) || a.name.localeCompare(b.name));
+  return rows;
+}
+
+// Formats computeRecapStandings() output as the established "To the
+// numbers, to the wall" closing block — top 4 get "In Nth place is...",
+// the rest get "X has...", matching every prior recap's convention exactly.
+function formatRecapStandingsBlock(wk) {
+  const rows = computeRecapStandings(wk);
+  const ord = n => (n===1?'1st':n===2?'2nd':n===3?'3rd':n+'th');
+  const talStr = t => Number.isInteger(t) ? String(t) : t.toFixed(1);
+  const lines = rows.map((r, i) => {
+    const transWord = r.trans === 1 ? 'tran' : 'trans';
+    const body = `${r.points.toFixed(2)} points, 0 players received, ${r.trans} ${transWord} and ${talStr(r.tal)} HMOTW; ${r.net < 0 ? '-' : ''}$${Math.abs(r.net).toFixed(2)}`;
+    return i < 4
+      ? `In ${ord(i+1)} place is ${r.name} with ${body}`
+      : `${r.name} has ${body}`;
+  });
+  return lines.join('\n');
+}
+
 function computeRecapTalkingPoints(wk) {
   const w = wk - 1; // 0-indexed into CUM_TOTALS/WEEKLY_RANKS/HMOTW_WK/DHMOTW_WK
   const stories = [];
@@ -5370,7 +5467,9 @@ const RECAPS = [
     week: 1,
     label: '',
     title: 'Week 1',
-    body: `<p>🎬 Maverick said it himself: the plane's a distraction, the ejection seat's a distraction, if you think, you're dead. This league doesn't hand out call signs, but if it did, <b style="color:#F943D5">Tim</b> just earned his. Off monster nights from <b>Josh Allen</b>, <b>Caleb Williams</b>, and <b>D'Andre Swift</b>, <b style="color:#F943D5">Tim</b> buzzed the tower for a Week 1 <b>Double HMOTW</b>, dropping <b>233.40 points</b> before the rest of us had even finished our pre-flight checklist.</p>
+    body: `<p>🛬 Welcome back, TNCFL. The runway's clear, the roster locks are set, and after a long offseason of trash talk and mock drafts, the 2026 season is officially wheels-up. Ten managers, one league, one curse still hanging over Thursday nights — let's see who's actually ready to fly. New draft picks are strapped in, waiver wire fingers are already twitchy, and somewhere out there a rookie sleeper is quietly plotting to wreck someone's whole season. The HMOTW crown is up for grabs again, the drought clock resets for no one, and the money circle doesn't care about your preseason hype. Buckle up — the first real scores are in, and the league already has a story to tell.</p>
+
+<p>🎬 Maverick said it himself: the plane's a distraction, the ejection seat's a distraction, if you think, you're dead. This league doesn't hand out call signs, but if it did, <b style="color:#F943D5">Tim</b> just earned his. Off monster nights from <b>Josh Allen</b>, <b>Caleb Williams</b>, and <b>D'Andre Swift</b>, <b style="color:#F943D5">Tim</b> buzzed the tower for a Week 1 <b>Double HMOTW</b>, dropping <b>233.40 points</b> before the rest of us had even finished our pre-flight checklist.</p>
 
 <p>🏆 And here's the part that should actually worry you: he was close. Real close. <b>233.40</b> puts him just <b>22.60 points</b> off the all-time single-week record — <b style="color:#2EEAEA">Kevin</b>'s <b>256.0</b> from <b>2013, Week 15</b>, a number that's been sitting untouched since before some of these rosters had names attached to them. <b style="color:#F943D5">Tim</b> didn't just win the week. He buzzed the control tower doing it, and the tower is still filing the paperwork.</p>
 
@@ -6785,6 +6884,15 @@ async function copyRecapPacket(){
   const theme = document.getElementById('recap-theme-select').value || '(none picked)';
   const freetext = document.getElementById('recap-freetext').value.trim();
   const allStories = RECAP_CURRENT_STORIES.map(s => '- ' + s.label).join('\n');
+  // Entry 270 (session S048): computed, week-scoped — replaces the old
+  // manual-transcription-from-a-screenshot step that caused two real
+  // mistakes in the Week 1 recap (wrong transaction counts, then a missed
+  // one for Tim). No more copying numbers off the live Money/Score tabs.
+  const standingsBlock = formatRecapStandingsBlock(wk);
+  const seasonTotals = computeRecapStandings(wk);
+  const grandTotalTrans = seasonTotals.reduce((s, r) => s + r.trans, 0);
+  const grandTotalTrades = seasonTotals.reduce((s, r) => s + r.trades, 0);
+  const grandTotalDH = DHMOTW_WK.slice(0, wk).filter(Boolean).length;
 
   const packet = [
     `TNCFL Week ${wk} Recap — talking points`,
@@ -6795,6 +6903,16 @@ async function copyRecapPacket(){
     `All detected talking points this week:`,
     allStories,
     freetext ? `\nAdditional notes from commissioner:\n${freetext}` : ``,
+    ``,
+    `To the numbers, to the wall. If the season were to end today, this will be the results:`,
+    ``,
+    `Total number of transactions: ${grandTotalTrans}`,
+    `Total number of players traded: ${grandTotalTrades}`,
+    `Total number of double HMOTW: ${grandTotalDH}`,
+    ``,
+    `Amounts owed/won below include all transactions, side, playoff, and Super Bowl bets.`,
+    ``,
+    standingsBlock,
   ].filter(Boolean).join('\n');
 
   try {
