@@ -1731,6 +1731,22 @@ async function fetchESPNData() {
         // something is actually still missing: compute every playerId
         // referenced in real transactions, diff against what's already
         // resolved, and only pay for the bulk fetch if that gap is non-empty.
+        //
+        // Entry 277 (session S048): first deployed version routed this
+        // through the normal espnFetch() → Worker's /espn-proxy path, same
+        // as every other ESPN call in this app — but that resolved 0 of 2
+        // still-missing names even though the data was confirmed present
+        // (Hanh's own manual console test found both). Root cause: /espn-
+        // proxy forwards the URL but always sends its OWN fixed header set
+        // server-side (Accept/Origin/Referer only, no X-Fantasy-Filter) —
+        // Hanh's working test sent a raw browser fetch WITH that header,
+        // and ESPN evidently needs some X-Fantasy-Filter present (even one
+        // that doesn't actually scope the response down) to hydrate the
+        // full player pool rather than some other default/smaller shape.
+        // Fixed by bypassing the Worker proxy for this one call and fetching
+        // ESPN directly from the browser, matching Hanh's confirmed-working
+        // request exactly — no worker.js change needed, so this doesn't add
+        // to the pending-deploy queue.
         {
           const neededIds = new Set();
           (transData.transactions || []).forEach(t => {
@@ -1744,7 +1760,12 @@ async function fetchESPNData() {
           if (stillMissing.length > 0) {
             try {
               const poolUrl = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/players?scoringPeriodId=0&view=kona_player_info`;
-              const poolResp = await espnFetch(poolUrl);
+              const poolResp = await fetch(poolUrl, {
+                headers: {
+                  'Accept': 'application/json',
+                  'X-Fantasy-Filter': JSON.stringify({ players: { filterIds: { value: stillMissing } } }),
+                },
+              });
               if (poolResp.ok) {
                 const poolData = await poolResp.json();
                 const poolPlayers = Array.isArray(poolData) ? poolData : (poolData.players || []);
