@@ -1542,11 +1542,32 @@ async function fetchESPNData() {
     // already-drafted player did resolve (misleadingly looked like a
     // random/inconsistent bug until traced to this). Now requests
     // CURRENT_WK explicitly.
+    // Entry 275 (session S048): was a SINGLE mRoster fetch for CURRENT_WK
+    // only — meant any player added in an earlier week and since DROPPED
+    // (confirmed live: Ted's Week 2 $26 waiver claim showing "Player
+    // #3929645" instead of a real name) could never resolve, because
+    // they're not on ANY current roster anymore. Same fix shape as Entry
+    // 248's transaction merge: fetch mRoster for every week 1..CURRENT_WK
+    // in parallel and merge every entry into PLAYER_NAME_MAP, so a player
+    // resolves if they were on ANY roster at ANY point this season, not
+    // just right now. A name/team/position doesn't change week to week, so
+    // last-write-wins on overlap is harmless.
     PLAYER_NAME_MAP = {};
     try {
-      const rosterResp = await espnFetch(CFG.espnUrl('mRoster', CURRENT_WK || 1));
-      if (rosterResp.ok) {
-        const rosterData = await rosterResp.json();
+      const rosterWeeks = Array.from({length: Math.max(1, CURRENT_WK || 1)}, (_, i) => i + 1);
+      const rosterResps = await Promise.all(
+        rosterWeeks.map(w => espnFetch(CFG.espnUrl('mRoster', w)).catch(e => ({ ok: false, _err: e })))
+      );
+      rosterResps.forEach((rosterResp, i) => {
+        if (!rosterResp || !rosterResp.ok) {
+          console.warn('[FA Activity] mRoster fetch for week ' + rosterWeeks[i] + ' not ok' + (rosterResp && rosterResp.status ? ' (status ' + rosterResp.status + ')' : '') + ' — skipped, other weeks still merge.');
+        }
+      });
+      const rosterDatas = await Promise.all(
+        rosterResps.map(r => (r && r.ok) ? r.json().catch(() => null) : Promise.resolve(null))
+      );
+      rosterDatas.forEach(rosterData => {
+        if (!rosterData) return;
         (rosterData.teams || []).forEach(team => {
           (team.roster && team.roster.entries || []).forEach(entry => {
             const player = entry.playerPoolEntry && entry.playerPoolEntry.player;
@@ -1561,10 +1582,8 @@ async function fetchESPNData() {
             }
           });
         });
-        console.info('[FA Activity] Resolved ' + Object.keys(PLAYER_NAME_MAP).length + ' player names from mRoster.');
-      } else {
-        console.warn('[FA Activity] mRoster fetch not ok (status ' + rosterResp.status + ') — player names will show as "Player #id".');
-      }
+      });
+      console.info('[FA Activity] Resolved ' + Object.keys(PLAYER_NAME_MAP).length + ' player names from mRoster (weeks 1-' + (CURRENT_WK || 1) + ').');
     } catch (rosterErr) {
       console.warn('[FA Activity] mRoster fetch/parse failed — player names will show as "Player #id".', rosterErr);
     }
@@ -1697,6 +1716,59 @@ async function fetchESPNData() {
         Object.entries(ESPN_ID_MAP).forEach(([idStr, meta]) => {
           FAAB_SPENT[meta.name] = spentByTeamId[Number(idStr)] || 0;
         });
+
+        // Entry 276 (session S048): fallback for players Entry 275's roster
+        // merge still can't resolve — confirmed live that some players
+        // (e.g. a free agent picked up and dropped between weekly roster
+        // snapshots) are never captured by ANY week's mRoster, no matter
+        // how many weeks are checked, because mRoster only reflects
+        // whoever's rostered AT FETCH TIME, not a full add/drop history.
+        // ESPN's player-pool endpoint (no leagueId/roster scoping at all)
+        // resolves any player regardless of roster status, but returns the
+        // ENTIRE player universe unfiltered (confirmed live — the
+        // X-Fantasy-Filter header didn't scope it down) — likely several MB,
+        // too expensive to fetch on every load. So this only fires when
+        // something is actually still missing: compute every playerId
+        // referenced in real transactions, diff against what's already
+        // resolved, and only pay for the bulk fetch if that gap is non-empty.
+        {
+          const neededIds = new Set();
+          (transData.transactions || []).forEach(t => {
+            (t.items || []).forEach(item => {
+              if ((item.type === 'ADD' || item.type === 'TRADE') && item.playerId) {
+                neededIds.add(item.playerId);
+              }
+            });
+          });
+          const stillMissing = [...neededIds].filter(id => !PLAYER_NAME_MAP[id]);
+          if (stillMissing.length > 0) {
+            try {
+              const poolUrl = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/players?scoringPeriodId=0&view=kona_player_info`;
+              const poolResp = await espnFetch(poolUrl);
+              if (poolResp.ok) {
+                const poolData = await poolResp.json();
+                const poolPlayers = Array.isArray(poolData) ? poolData : (poolData.players || []);
+                let filled = 0;
+                poolPlayers.forEach(p => {
+                  const player = p.player || p; // shape seen live: flat player objects in an array
+                  if (player && player.id && stillMissing.includes(player.id) && !PLAYER_NAME_MAP[player.id]) {
+                    PLAYER_NAME_MAP[player.id] = {
+                      name: player.fullName,
+                      proTeamId: player.proTeamId,
+                      positionId: player.defaultPositionId,
+                    };
+                    filled++;
+                  }
+                });
+                console.info('[FA Activity] Fallback player-pool fetch resolved ' + filled + ' of ' + stillMissing.length + ' still-missing name(s).');
+              } else {
+                console.warn('[FA Activity] Fallback player-pool fetch not ok (status ' + poolResp.status + ') — remaining unresolved names will show as "Player #id".');
+              }
+            } catch (poolErr) {
+              console.warn('[FA Activity] Fallback player-pool fetch failed — remaining unresolved names will show as "Player #id".', poolErr);
+            }
+          }
+        }
 
         // FA Activity — live client-side version (Entry 122). Populates
         // FA_ACTIVITY[wk] from this same transData + PLAYER_NAME_MAP, so
