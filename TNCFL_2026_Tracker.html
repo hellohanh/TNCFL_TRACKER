@@ -3187,6 +3187,50 @@ const SESSIONS_LABELS = ['WED','THU','FLEX','SUN MOR','SUN AFT','SNF','MNF'];
 // behavior as FLEX: weeks with no WED game just carry the prior value forward,
 // no separate freeze. See TNCFL_2026_TRACKER_RULES.md Section 8 Item 3.
 const LAST_SESS = SESSIONS_LABELS.length - 1;
+
+// Entry 278 (session S048): client-side mirror of worker.js's SESSION_SLOTS
+// day/hour boundaries — used only to decide which column the Live Snapshot
+// ghost value belongs under.
+// ⚠️ DUPLICATED knowledge — see TNCFL_2026_TRACKER_RULES.md Section 12
+// before touching this or SESSION_SLOTS in worker.js. They must be changed
+// together and re-verified against real calendar dates, not just read by
+// eye — this function's own first draft got WED/THU each 24h wrong that way.
+// Previously hardcoded to always place it at
+// index 0 (WED), so a live pull taken on, say, Thursday during an
+// in-progress Thursday game showed its (cumulative) total under WED
+// instead of THU — confirmed live: Week 2 with no real snapshot history
+// yet showed the current cumulative score under WED with every other
+// column blank, even though Thursday's game was the one actually live.
+// Computes hours-since-the-most-recent-Wednesday-00:00-UTC for "now" and
+// for each session's own start boundary, then returns the LATEST session
+// whose window has already opened — not a narrow "are we in the exact
+// hour range right now" check, since the ghost value is a cumulative
+// season-to-date total, not a session-specific delta, so it stays correct
+// for the whole rest of that session's day, not just its kickoff hour.
+function currentLiveSessionIndex() {
+  const now = new Date();
+  const wedAnchoredDay = (now.getUTCDay() + 4) % 7; // Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
+  const nowOffsetHours = wedAnchoredDay * 24 + now.getUTCHours();
+  // [SESSIONS_LABELS index, hours-since-Wednesday-00:00-UTC start] — derived
+  // directly from worker.js's own SESSION_SLOTS (dayOfWeek/hourStart), run
+  // through the same wedAnchoredDay rotation as `now` above, NOT hand-picked
+  // — a first draft hand-picked these and got WED/THU each 24h off, because
+  // SESSION_SLOTS' "WED" slot is actually JS-Thursday 00:00 UTC (Wed evening
+  // ET rolls into Thursday UTC) and "THU" is JS-Friday 00:00 UTC, not the
+  // calendar days their labels suggest.
+  const starts = [
+    [0, 24],   // WED     — Wed evening ET = Thu 00:00 UTC
+    [1, 48],   // THU     — Thu evening ET = Fri 00:00 UTC
+    [2, 66],   // FLEX    — Fri evening ET = Fri 18:00 UTC (earliest of the two FLEX slots)
+    [3, 113],  // SUN MOR — Sun 1pm ET = Sun 17:00 UTC
+    [4, 116],  // SUN AFT — Sun 4pm ET = Sun 20:00 UTC
+    [5, 120],  // SNF     — Sun evening ET = Mon 00:00 UTC
+    [6, 144],  // MNF     — Mon evening ET = Tue 00:00 UTC
+  ];
+  let best = -1;
+  starts.forEach(([idx, offset]) => { if (offset <= nowOffsetHours) best = idx; });
+  return best; // -1 only if somehow before Wednesday's own window opens
+}
 // SESSION_KV_KEYS — parallel to SESSIONS_LABELS by index, but matching the
 // Worker's KV key naming (underscores, e.g. 'SUN_MOR' not 'SUN MOR').
 const SESSION_KV_KEYS = ['WED','THU','FLEX','SUN_MOR','SUN_AFT','SNF','MNF'];
@@ -3559,7 +3603,8 @@ function renderWkCard(w) {
   // cells for free, instead of hand-building a second table layout.
   const ghostAsTable = (elId, statusWord, vals) => {
     const synthetic = Array(SESSIONS_LABELS.length).fill(null);
-    synthetic[0] = vals; // next-up slot when nothing has resolved yet
+    const liveIdx = currentLiveSessionIndex();
+    synthetic[liveIdx >= 0 ? liveIdx : 0] = vals; // place under whichever session is actually live right now
     renderMovTable(elId, w, statusWord === 'completed' ? 'act' : 'proj', synthetic);
     document.getElementById(elId).insertAdjacentHTML('afterbegin',
       '<div style="font-size:10px;color:var(--mustard);margin:0 0 4px;">● live snapshot — no sessions ' + statusWord + ' yet</div>');
