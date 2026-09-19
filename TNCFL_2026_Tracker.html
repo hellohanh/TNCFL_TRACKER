@@ -3262,17 +3262,12 @@ function renderPBMC() {
   });
 }
 
-// Entry 281 (session S048): NEW dynamic session model — identical to
-// worker.js's own copy (SLOT_ORDER/etPartsFor/slotNameFor), per
-// TNCFL_2026_TRACKER_RULES.md Section 12's rule that this duplicated
-// knowledge must be kept in sync and changed together. Added here ahead of
-// the full Weekly Movement display rebuild (Phase 3) because the session-
-// final reporting mechanism below needs it now — the OLD SESSIONS_LABELS/
-// currentLiveSessionIndex() just below this block are still what the
-// CURRENT (pre-redesign) display renders from; they'll be replaced with
-// this once Phase 3 lands. Until then, treat SESSIONS_LABELS/
-// currentLiveSessionIndex() as the stale display path and this block as the
-// verified-correct one everything NEW builds on.
+// Entry 281 (session S048): dynamic session model — identical to worker.js's
+// own copy (SLOT_ORDER/etPartsFor/slotNameFor), per TNCFL_2026_TRACKER_RULES.md
+// Section 12's rule that this duplicated knowledge must be kept in sync and
+// changed together. This is the one real session model the whole Weekly
+// Movement tab renders from (Entry 289: the old fixed-slot system this
+// replaced has been fully removed, not just superseded).
 const SLOT_ORDER = ['WED', 'THU', 'FRI', 'SAT', 'SUN_MOR', 'SUN_AFT', 'SNF', 'MNF', 'TUE'];
 
 function etPartsFor(kickoffISO) {
@@ -3306,40 +3301,16 @@ function slotNameFor(etDay, etHour) {
 
 
 // ── MOVEMENT ──────────────────────────────────────────────────────────────
-// Entry 284 (session S048), Phase 4: the fixed 7-slot session system below
-// (SESSIONS_LABELS/LAST_SESS/currentLiveSessionIndex/SESSION_KV_KEYS) is
-// SUPERSEDED by the dynamic SLOT_ORDER/etPartsFor/slotNameFor model added
+// Entry 284 (session S048), Phase 4: the old fixed 7-slot session system
+// (SESSIONS_LABELS/LAST_SESS/currentLiveSessionIndex/SESSION_KV_KEYS) was
+// replaced by the dynamic SLOT_ORDER/etPartsFor/slotNameFor model added
 // above in Entry 281, verified end-to-end in Weekly_Movement_Sandbox.html
-// (Entries 282-283) before porting back here. Left commented out, not
-// deleted, as a working reference — see TNCFL_2026_TRACKER_RULES.md
-// Section 12 for the history of why this system needed replacing at all.
-/*
-const SESSIONS_LABELS = ['WED','THU','FLEX','SUN MOR','SUN AFT','SNF','MNF'];
-// WED added 2026-09-08 (Entry 90): 2026 has Wednesday-night games in Week 1
-// (season opener, Sept 9) and Week 12 (Thanksgiving Eve) — same carryover
-// behavior as FLEX: weeks with no WED game just carry the prior value forward,
-// no separate freeze. See TNCFL_2026_TRACKER_RULES.md Section 8 Item 3.
-const LAST_SESS = SESSIONS_LABELS.length - 1;
-
-function currentLiveSessionIndex() {
-  const now = new Date();
-  const wedAnchoredDay = (now.getUTCDay() + 4) % 7; // Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
-  const nowOffsetHours = wedAnchoredDay * 24 + now.getUTCHours();
-  const starts = [
-    [0, 24],   // WED     — Wed evening ET = Thu 00:00 UTC
-    [1, 48],   // THU     — Thu evening ET = Fri 00:00 UTC
-    [2, 66],   // FLEX    — Fri evening ET = Fri 18:00 UTC (earliest of the two FLEX slots)
-    [3, 113],  // SUN MOR — Sun 1pm ET = Sun 17:00 UTC
-    [4, 116],  // SUN AFT — Sun 4pm ET = Sun 20:00 UTC
-    [5, 120],  // SNF     — Sun evening ET = Mon 00:00 UTC
-    [6, 144],  // MNF     — Mon evening ET = Tue 00:00 UTC
-  ];
-  let best = -1;
-  starts.forEach(([idx, offset]) => { if (offset <= nowOffsetHours) best = idx; });
-  return best; // -1 only if somehow before Wednesday's own window opens
-}
-const SESSION_KV_KEYS = ['WED','THU','FLEX','SUN_MOR','SUN_AFT','SNF','MNF'];
-*/
+// (Entries 282-283) before porting back here. The old code briefly stayed
+// commented out as a reference during the redesign; fully removed (Entry
+// 289) once the new system was verified stable in production — see
+// TNCFL_2026_TRACKER_RULES.md Section 12 for the history of why this
+// system needed replacing at all, and SESSION_LEDGER.md Entries 281-288
+// for the full redesign record if the old approach is ever needed again.
 
 // Display text for each session, matching the ORIGINAL SESSIONS_LABELS
 // wording exactly (a space, not an underscore, for the two Sunday slots) —
@@ -3382,68 +3353,16 @@ let CURRENT_WK_SCHEDULE = [];
 // mistaken for or bleeding into the real, locked-in snapshot history.
 let MOV_GHOST = { week: null, actualGhostIdx: -1, projGhostIdx: -1, actualVals: null, projVals: null, ts: null };
 
-// Entry 284 (session S048), Phase 4: OLD pullLiveMovementSnapshot — always
-// wrote MOV_GHOST unconditionally to whatever week button was clicked, with
-// no concept of WHICH session the pull actually represents (that's what
-// Entry 278's now-also-superseded currentLiveSessionIndex() was for, at
-// render time). Left as reference; see the rebuilt version below.
-/*
-async function pullLiveMovementSnapshot(w) {
-  if (w !== CURRENT_WK - 1) return; // only the current week's card has the button, but guard anyway
-  const btn = document.getElementById('mov-snap-btn-' + w);
-  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Pulling…'; }
-  try {
-    const pv = '2f7cc8c5b1548d2fe5b45e1076eb388927b0a204';
-    const multiViewUrl = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/segments/0/leagues/${CFG.LEAGUE_ID}` +
-      `?scoringPeriodId=${CURRENT_WK}&view=mMatchup&view=mMatchupScore&view=mScoreboard&platformVersion=${pv}`;
-    const resp = await espnFetch(multiViewUrl);
-    if (!resp.ok) throw new Error('ESPN fetch not ok (' + resp.status + ')');
-    const data = await resp.json();
-    const byTeam = {};
-    const teamNameById = {};
-    Object.entries(ESPN_ID_MAP).forEach(([espnId, meta]) => { teamNameById[espnId] = meta.name; });
-    (data.schedule || []).forEach(m => {
-      if (m.matchupPeriodId !== CURRENT_WK) return;
-      [m.away, m.home].forEach(side => {
-        if (!side || !side.teamId) return;
-        const roster = side.rosterForCurrentScoringPeriod;
-        const officialActual = (typeof side.totalPointsLive === 'number') ? side.totalPointsLive : null;
-        const officialProjected = (typeof side.totalProjectedPointsLive === 'number') ? side.totalProjectedPointsLive : null;
-        let manualProjected = 0;
-        if (roster && roster.entries) {
-          roster.entries.forEach(entry => {
-            const slot = entry.lineupSlotId;
-            const isBenchOrIR = slot === 20 || slot === 21;
-            const stats = (entry.playerPoolEntry && entry.playerPoolEntry.player && entry.playerPoolEntry.player.stats) || [];
-            const actualStat = stats.find(s => s.scoringPeriodId === CURRENT_WK && s.statSourceId === 0);
-            const projStat   = stats.find(s => s.scoringPeriodId === CURRENT_WK && s.statSourceId === 1);
-            const chosen = (actualStat ? actualStat.appliedTotal : (projStat ? projStat.appliedTotal : 0)) || 0;
-            if (!isBenchOrIR) manualProjected += chosen;
-          });
-        }
-        const actual = officialActual !== null ? officialActual : ((roster ? roster.appliedStatTotal : 0) || 0);
-        const projected = officialProjected !== null ? officialProjected : manualProjected;
-        byTeam[side.teamId] = { actual, projected };
-      });
-    });
-    const idsInOrder = Object.keys(ESPN_ID_MAP).map(Number);
-    const actualVals = idsInOrder.map(id => (byTeam[id] ? byTeam[id].actual : 0));
-    const projVals    = idsInOrder.map(id => (byTeam[id] ? byTeam[id].projected : 0));
-    MOV_GHOST = { week: w, actualVals, projVals, ts: new Date() };
-    renderWkCard(w);
-  } catch (err) {
-    console.error('[Live Snapshot] pull failed:', err);
-    MOV_GHOST = { week: null, actualVals: null, projVals: null, ts: null };
-    if (btn) btn.title = 'Live snapshot failed — try again';
-  } finally {
-    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Live Snapshot'; }
-  }
-}
-*/
-
-// Entry 284 (session S048), Phase 4: rebuilt on the dynamic session model —
-// verified in Weekly_Movement_Sandbox.html (Entries 282-283) before porting
-// here. Determines WHICH session the live pull actually represents (the
+// Entry 284/287/288 (session S048), Phase 4 + follow-up fixes: rebuilt on
+// the dynamic session model — verified in Weekly_Movement_Sandbox.html
+// (Entries 282-283) before porting back, then corrected twice more against
+// real live behavior (Entries 287-288: the actual/projected ghosts belong
+// at different indices, and real data + the ghost must merge rather than
+// be mutually exclusive). The old version briefly stayed commented out as
+// a reference during the redesign; fully removed (Entry 289) once this was
+// verified stable in production — see SESSION_LEDGER.md Entries 284-288
+// for the full record if it's ever needed again.
+// Determines WHICH session the live pull actually represents (the
 // latest one whose real kickoff has passed but has no real actual data
 // yet) from CURRENT_WK_SCHEDULE + MOV_DATA, instead of the old render-time
 // guess. The ESPN fetch/mapping-to-MANAGERS-order logic itself is
