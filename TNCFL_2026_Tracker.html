@@ -1628,6 +1628,42 @@ async function fetchESPNData() {
         } else {
           console.warn('[Schedule] Worker rejected schedule submission (status ' + submitResp.status + ').');
         }
+
+        // Entry 281 (session S048): real per-game completion check — the
+        // FAST half of the actual-snapshot latency fix (the slow half is
+        // worker.js's own time-based fallback, for whenever nobody's here
+        // to run this). Groups this week's real games by session (the new
+        // ET-based derivation, not the stale SESSIONS_LABELS path) and
+        // reports any session whose games have ALL gone final
+        // (status.type.completed — confirmed live against ESPN's real
+        // response shape, not assumed). worker.js's new
+        // POST /report-session-final is itself idempotent, so this is safe
+        // to call on every page load even when nothing's actually changed.
+        try {
+          const bySession = {};
+          events.forEach(ev => {
+            const { etDay, etHour } = etPartsFor(ev.date);
+            const name = slotNameFor(etDay, etHour);
+            if (!name) return;
+            if (!bySession[name]) bySession[name] = [];
+            bySession[name].push(!!(ev.status && ev.status.type && ev.status.type.completed));
+          });
+          const finalSessions = Object.keys(bySession).filter(name => bySession[name].every(Boolean));
+          if (finalSessions.length > 0) {
+            const reportResp = await fetch(`${WORKER_URL}/report-session-final`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ week: nflWeek, finalSessions }),
+            });
+            if (reportResp.ok) {
+              console.info('[Schedule] Reported final sessions: ' + finalSessions.join(', '));
+            } else {
+              console.warn('[Schedule] Worker rejected session-final report (status ' + reportResp.status + ').');
+            }
+          }
+        } catch (finalErr) {
+          console.warn('[Schedule] Session-final detection/report failed — the time-based fallback will still catch it eventually.', finalErr);
+        }
       } else {
         console.warn('[Schedule] ESPN scoreboard fetch not ok (status ' + nflResp.status + ') — week_schedule not refreshed this load.');
       }
@@ -1883,7 +1919,8 @@ async function fetchESPNData() {
       console.warn('[Touchdown Stats] Worker fetch failed — TD cards will show as not-yet-locked.', tdErr);
     }
 
-    // ── Weekly Movement: live snapshot fetch (Entry 107, 2026-09-09) ──────
+    // ── Weekly Movement: live snapshot fetch (Entry 107, 2026-09-09;
+    // rebuilt Entry 284, session S048 Phase 4) ─────────────────────────────
     // Populates MOV_DATA from the Worker's GET /snapshots/:week for every
     // week 1..CURRENT_WK — not just locked weeks. Hanh wants this visible
     // as the week progresses (shapes weekly recap positioning), so this is
@@ -1891,9 +1928,34 @@ async function fetchESPNData() {
     // else. A session with no snapshot yet is left `null`, not fabricated —
     // renderWkCard()/drawMovBump() handle a partially-in-progress week.
     // Fails soft per-week: one bad week's fetch doesn't block the others.
+    //
+    // Entry 284: session lists are now per-week and dynamic, not the old
+    // fixed 7-slot SESSION_KV_KEYS. For the CURRENT week, the real schedule
+    // (GET /week-schedule — the same one POST /submit-schedule above just
+    // refreshed) is the authoritative column list, since it correctly
+    // includes sessions that haven't resolved yet (a future Sunday game,
+    // say) — snapshot presence alone can't distinguish "no game this slot"
+    // from "game hasn't happened yet". For every OTHER (past) week, the
+    // snapshot response's own keys ARE the authoritative list — a fully-
+    // elapsed week has complete real data for every session it actually
+    // had, so nothing needs supplementing.
     try {
       MOV_DATA.actual = [];
       MOV_DATA.proj = [];
+      MOV_SESSIONS.length = 0;
+
+      let currentWkScheduleNames = null;
+      try {
+        const schedResp = await fetch(`${WORKER_URL}/week-schedule`);
+        if (schedResp.ok) {
+          const schedData = await schedResp.json();
+          CURRENT_WK_SCHEDULE = schedData.sessions || [];
+          currentWkScheduleNames = CURRENT_WK_SCHEDULE.map(s => s.name);
+        }
+      } catch (schedFetchErr) {
+        console.warn('[Weekly Movement] week-schedule fetch failed — current week will fall back to snapshot-presence-only session list.', schedFetchErr);
+      }
+
       for (let w = 1; w <= CURRENT_WK; w++) {
         try {
           const snapResp = await fetch(`${WORKER_URL}/snapshots/${w}`);
@@ -1903,13 +1965,18 @@ async function fetchESPNData() {
           }
           const snapData = await snapResp.json();
           const snaps = snapData.snapshots || {};
-          MOV_DATA.actual[w - 1] = SESSION_KV_KEYS.map(key => {
-            const entry = snaps[key];
+          const isCurrentWk = (w === CURRENT_WK);
+          const sessionNames = (isCurrentWk && currentWkScheduleNames && currentWkScheduleNames.length)
+            ? currentWkScheduleNames
+            : SLOT_ORDER.filter(name => !!snaps[name]);
+          MOV_SESSIONS[w - 1] = sessionNames;
+          MOV_DATA.actual[w - 1] = sessionNames.map(name => {
+            const entry = snaps[name];
             if (!entry || !entry.actual) return null;
             return MANAGERS.map(m => entry.actual[m.name] ?? null);
           });
-          MOV_DATA.proj[w - 1] = SESSION_KV_KEYS.map(key => {
-            const entry = snaps[key];
+          MOV_DATA.proj[w - 1] = sessionNames.map(name => {
+            const entry = snaps[name];
             if (!entry || !entry.proj) return null;
             return MANAGERS.map(m => entry.proj[m.name] ?? null);
           });
@@ -3195,8 +3262,58 @@ function renderPBMC() {
   });
 }
 
+// Entry 281 (session S048): NEW dynamic session model — identical to
+// worker.js's own copy (SLOT_ORDER/etPartsFor/slotNameFor), per
+// TNCFL_2026_TRACKER_RULES.md Section 12's rule that this duplicated
+// knowledge must be kept in sync and changed together. Added here ahead of
+// the full Weekly Movement display rebuild (Phase 3) because the session-
+// final reporting mechanism below needs it now — the OLD SESSIONS_LABELS/
+// currentLiveSessionIndex() just below this block are still what the
+// CURRENT (pre-redesign) display renders from; they'll be replaced with
+// this once Phase 3 lands. Until then, treat SESSIONS_LABELS/
+// currentLiveSessionIndex() as the stale display path and this block as the
+// verified-correct one everything NEW builds on.
+const SLOT_ORDER = ['WED', 'THU', 'FRI', 'SAT', 'SUN_MOR', 'SUN_AFT', 'SNF', 'MNF', 'TUE'];
+
+function etPartsFor(kickoffISO) {
+  const d = new Date(kickoffISO);
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'America/New_York',
+    weekday: 'short', hour: 'numeric', hour12: false,
+  });
+  const parts = fmt.formatToParts(d);
+  const weekday = parts.find(p => p.type === 'weekday').value;
+  let hour = parseInt(parts.find(p => p.type === 'hour').value, 10);
+  if (hour === 24) hour = 0;
+  return { etDay: weekday, etHour: hour };
+}
+
+function slotNameFor(etDay, etHour) {
+  switch (etDay) {
+    case 'Wed': return 'WED';
+    case 'Thu': return 'THU';
+    case 'Fri': return 'FRI';
+    case 'Sat': return 'SAT';
+    case 'Mon': return 'MNF';
+    case 'Tue': return 'TUE';
+    case 'Sun':
+      if (etHour < 16) return 'SUN_MOR';
+      if (etHour < 19) return 'SUN_AFT';
+      return 'SNF';
+    default: return null;
+  }
+}
+
 
 // ── MOVEMENT ──────────────────────────────────────────────────────────────
+// Entry 284 (session S048), Phase 4: the fixed 7-slot session system below
+// (SESSIONS_LABELS/LAST_SESS/currentLiveSessionIndex/SESSION_KV_KEYS) is
+// SUPERSEDED by the dynamic SLOT_ORDER/etPartsFor/slotNameFor model added
+// above in Entry 281, verified end-to-end in Weekly_Movement_Sandbox.html
+// (Entries 282-283) before porting back here. Left commented out, not
+// deleted, as a working reference — see TNCFL_2026_TRACKER_RULES.md
+// Section 12 for the history of why this system needed replacing at all.
+/*
 const SESSIONS_LABELS = ['WED','THU','FLEX','SUN MOR','SUN AFT','SNF','MNF'];
 // WED added 2026-09-08 (Entry 90): 2026 has Wednesday-night games in Week 1
 // (season opener, Sept 9) and Week 12 (Thanksgiving Eve) — same carryover
@@ -3204,36 +3321,10 @@ const SESSIONS_LABELS = ['WED','THU','FLEX','SUN MOR','SUN AFT','SNF','MNF'];
 // no separate freeze. See TNCFL_2026_TRACKER_RULES.md Section 8 Item 3.
 const LAST_SESS = SESSIONS_LABELS.length - 1;
 
-// Entry 278 (session S048): client-side mirror of worker.js's SESSION_SLOTS
-// day/hour boundaries — used only to decide which column the Live Snapshot
-// ghost value belongs under.
-// ⚠️ DUPLICATED knowledge — see TNCFL_2026_TRACKER_RULES.md Section 12
-// before touching this or SESSION_SLOTS in worker.js. They must be changed
-// together and re-verified against real calendar dates, not just read by
-// eye — this function's own first draft got WED/THU each 24h wrong that way.
-// Previously hardcoded to always place it at
-// index 0 (WED), so a live pull taken on, say, Thursday during an
-// in-progress Thursday game showed its (cumulative) total under WED
-// instead of THU — confirmed live: Week 2 with no real snapshot history
-// yet showed the current cumulative score under WED with every other
-// column blank, even though Thursday's game was the one actually live.
-// Computes hours-since-the-most-recent-Wednesday-00:00-UTC for "now" and
-// for each session's own start boundary, then returns the LATEST session
-// whose window has already opened — not a narrow "are we in the exact
-// hour range right now" check, since the ghost value is a cumulative
-// season-to-date total, not a session-specific delta, so it stays correct
-// for the whole rest of that session's day, not just its kickoff hour.
 function currentLiveSessionIndex() {
   const now = new Date();
   const wedAnchoredDay = (now.getUTCDay() + 4) % 7; // Wed=0, Thu=1, Fri=2, Sat=3, Sun=4, Mon=5, Tue=6
   const nowOffsetHours = wedAnchoredDay * 24 + now.getUTCHours();
-  // [SESSIONS_LABELS index, hours-since-Wednesday-00:00-UTC start] — derived
-  // directly from worker.js's own SESSION_SLOTS (dayOfWeek/hourStart), run
-  // through the same wedAnchoredDay rotation as `now` above, NOT hand-picked
-  // — a first draft hand-picked these and got WED/THU each 24h off, because
-  // SESSION_SLOTS' "WED" slot is actually JS-Thursday 00:00 UTC (Wed evening
-  // ET rolls into Thursday UTC) and "THU" is JS-Friday 00:00 UTC, not the
-  // calendar days their labels suggest.
   const starts = [
     [0, 24],   // WED     — Wed evening ET = Thu 00:00 UTC
     [1, 48],   // THU     — Thu evening ET = Fri 00:00 UTC
@@ -3247,9 +3338,18 @@ function currentLiveSessionIndex() {
   starts.forEach(([idx, offset]) => { if (offset <= nowOffsetHours) best = idx; });
   return best; // -1 only if somehow before Wednesday's own window opens
 }
-// SESSION_KV_KEYS — parallel to SESSIONS_LABELS by index, but matching the
-// Worker's KV key naming (underscores, e.g. 'SUN_MOR' not 'SUN MOR').
 const SESSION_KV_KEYS = ['WED','THU','FLEX','SUN_MOR','SUN_AFT','SNF','MNF'];
+*/
+
+// Display text for each session, matching the ORIGINAL SESSIONS_LABELS
+// wording exactly (a space, not an underscore, for the two Sunday slots) —
+// the visual output stays identical even though the underlying key names
+// (SLOT_ORDER, from Entry 281) use underscores for KV-key-safety.
+const SESSION_DISPLAY = {
+  WED: 'WED', THU: 'THU', FRI: 'FRI', SAT: 'SAT',
+  SUN_MOR: 'SUN MOR', SUN_AFT: 'SUN AFT', SNF: 'SNF', MNF: 'MNF', TUE: 'TUE',
+};
+
 // Entry 107 (2026-09-09): Weekly Movement shows weeks 1..CURRENT_WK
 // (live, in-progress) — uses CURRENT_WK specifically, not LIVE_WK/TOTAL_WKS.
 // Confirmed with Hanh — she wants this data visible as the week progresses
@@ -3260,42 +3360,100 @@ const SESSION_KV_KEYS = ['WED','THU','FLEX','SUN_MOR','SUN_AFT','SNF','MNF'];
 // drought on provisional data would be actively wrong, Money because it
 // distributes real dollars and Hanh wants that gated strictly on lock.
 
-// Generate simulated session data for each week (7 sessions incl. WED)
-// actual[w][s][i] = accumulated actual score for manager i after session s in week w
-// proj[w][s][i]   = projected score for manager i before session s in week w
 // Movement data — populated live from the Worker's GET /snapshots/:week
-// (see fetchESPNData()) for weeks 1..CURRENT_WK. A session with no snapshot
-// yet (hasn't happened) is `null` at that index, not a fabricated number.
+// (see fetchESPNData()) for weeks 1..CURRENT_WK. Entry 284: each week's
+// array is now variable-length, one entry per REAL session that week (no
+// more fixed 7-slot indexing) — MOV_SESSIONS[w] holds the ordered list of
+// session NAMES for week w, parallel to MOV_DATA.actual[w]/proj[w].
 const MOV_DATA = {actual:[], proj:[]}; // empty until weeks are entered
+const MOV_SESSIONS = []; // MOV_SESSIONS[w] = ['THU','SUN_MOR',...] for that week, in order
+// The current week's real schedule (name/kickoff/snapshotAt per session),
+// from GET /week-schedule — the authoritative "what sessions exist and
+// when do they kick off" source for the live-detection logic below.
+let CURRENT_WK_SCHEDULE = [];
 
-// MOV_GHOST — ephemeral "Live Snapshot" state (Entry 198, 2026-09-10).
+// MOV_GHOST — ephemeral "Live Snapshot" state (Entry 198, 2026-09-10;
+// reshaped Entry 284 for the dynamic model — sessionName/liveIdx replace
+// the old assumption that a ghost always belongs at a fixed index).
 // NOT persisted anywhere — lives only in this JS variable, overwritten on
 // every click, gone on tab switch or page reload. Never written to the
 // Worker/KV, unlike the real session snapshots in MOV_DATA. Deliberately
 // separate from MOV_DATA so there's no risk of ghost data ever being
 // mistaken for or bleeding into the real, locked-in snapshot history.
-let MOV_GHOST = { week: null, actualVals: null, projVals: null, ts: null };
+let MOV_GHOST = { week: null, actualGhostIdx: -1, projGhostIdx: -1, actualVals: null, projVals: null, ts: null };
 
+// Entry 284 (session S048), Phase 4: OLD pullLiveMovementSnapshot — always
+// wrote MOV_GHOST unconditionally to whatever week button was clicked, with
+// no concept of WHICH session the pull actually represents (that's what
+// Entry 278's now-also-superseded currentLiveSessionIndex() was for, at
+// render time). Left as reference; see the rebuilt version below.
+/*
 async function pullLiveMovementSnapshot(w) {
   if (w !== CURRENT_WK - 1) return; // only the current week's card has the button, but guard anyway
   const btn = document.getElementById('mov-snap-btn-' + w);
   if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Pulling…'; }
   try {
-    // Fresh fetch at click time (not the page-load data) — scoped to
-    // CURRENT_WK the same way fetchESPNData()'s live-score rescope is,
-    // since rosterForCurrentScoringPeriod is only meaningful for whatever
-    // scoringPeriodId was actually requested.
-    // Entry 214 (session S045): dropped the manual per-player projection
-    // math (Entries 200/213) entirely. Confirmed via the fflr R package's
-    // open-source live_scoring() implementation (github.com/k5cents/fflr,
-    // R/live.R) that ESPN's own mScoreboard view returns
-    // side.totalPointsLive and side.totalProjectedPointsLive directly —
-    // this IS the same live-blended figure ESPN's own site shows (already
-    // accounts for in-progress vs. finished games server-side), so there's
-    // no need to reconstruct it player-by-player or infer game state
-    // ourselves. Added mScoreboard as a third view alongside the existing
-    // mMatchup + mMatchupScore (CFG.espnUrl() only supports one view param,
-    // so this URL is still built manually, same as Entry 200).
+    const pv = '2f7cc8c5b1548d2fe5b45e1076eb388927b0a204';
+    const multiViewUrl = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/segments/0/leagues/${CFG.LEAGUE_ID}` +
+      `?scoringPeriodId=${CURRENT_WK}&view=mMatchup&view=mMatchupScore&view=mScoreboard&platformVersion=${pv}`;
+    const resp = await espnFetch(multiViewUrl);
+    if (!resp.ok) throw new Error('ESPN fetch not ok (' + resp.status + ')');
+    const data = await resp.json();
+    const byTeam = {};
+    const teamNameById = {};
+    Object.entries(ESPN_ID_MAP).forEach(([espnId, meta]) => { teamNameById[espnId] = meta.name; });
+    (data.schedule || []).forEach(m => {
+      if (m.matchupPeriodId !== CURRENT_WK) return;
+      [m.away, m.home].forEach(side => {
+        if (!side || !side.teamId) return;
+        const roster = side.rosterForCurrentScoringPeriod;
+        const officialActual = (typeof side.totalPointsLive === 'number') ? side.totalPointsLive : null;
+        const officialProjected = (typeof side.totalProjectedPointsLive === 'number') ? side.totalProjectedPointsLive : null;
+        let manualProjected = 0;
+        if (roster && roster.entries) {
+          roster.entries.forEach(entry => {
+            const slot = entry.lineupSlotId;
+            const isBenchOrIR = slot === 20 || slot === 21;
+            const stats = (entry.playerPoolEntry && entry.playerPoolEntry.player && entry.playerPoolEntry.player.stats) || [];
+            const actualStat = stats.find(s => s.scoringPeriodId === CURRENT_WK && s.statSourceId === 0);
+            const projStat   = stats.find(s => s.scoringPeriodId === CURRENT_WK && s.statSourceId === 1);
+            const chosen = (actualStat ? actualStat.appliedTotal : (projStat ? projStat.appliedTotal : 0)) || 0;
+            if (!isBenchOrIR) manualProjected += chosen;
+          });
+        }
+        const actual = officialActual !== null ? officialActual : ((roster ? roster.appliedStatTotal : 0) || 0);
+        const projected = officialProjected !== null ? officialProjected : manualProjected;
+        byTeam[side.teamId] = { actual, projected };
+      });
+    });
+    const idsInOrder = Object.keys(ESPN_ID_MAP).map(Number);
+    const actualVals = idsInOrder.map(id => (byTeam[id] ? byTeam[id].actual : 0));
+    const projVals    = idsInOrder.map(id => (byTeam[id] ? byTeam[id].projected : 0));
+    MOV_GHOST = { week: w, actualVals, projVals, ts: new Date() };
+    renderWkCard(w);
+  } catch (err) {
+    console.error('[Live Snapshot] pull failed:', err);
+    MOV_GHOST = { week: null, actualVals: null, projVals: null, ts: null };
+    if (btn) btn.title = 'Live snapshot failed — try again';
+  } finally {
+    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Live Snapshot'; }
+  }
+}
+*/
+
+// Entry 284 (session S048), Phase 4: rebuilt on the dynamic session model —
+// verified in Weekly_Movement_Sandbox.html (Entries 282-283) before porting
+// here. Determines WHICH session the live pull actually represents (the
+// latest one whose real kickoff has passed but has no real actual data
+// yet) from CURRENT_WK_SCHEDULE + MOV_DATA, instead of the old render-time
+// guess. The ESPN fetch/mapping-to-MANAGERS-order logic itself is
+// unchanged — ESPN's own live-blended totals were already correct; only
+// the "what session is this for" question was ever wrong.
+async function pullLiveMovementSnapshot(w) {
+  if (w !== CURRENT_WK - 1) return; // only the current week's card has the button, but guard anyway
+  const btn = document.getElementById('mov-snap-btn-' + w);
+  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Pulling…'; }
+  try {
     const pv = '2f7cc8c5b1548d2fe5b45e1076eb388927b0a204';
     const multiViewUrl = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/segments/0/leagues/${CFG.LEAGUE_ID}` +
       `?scoringPeriodId=${CURRENT_WK}&view=mMatchup&view=mMatchupScore&view=mScoreboard&platformVersion=${pv}`;
@@ -3310,12 +3468,6 @@ async function pullLiveMovementSnapshot(w) {
       if (m.matchupPeriodId !== CURRENT_WK) return;
       [m.away, m.home].forEach(side => {
         if (!side || !side.teamId) return;
-        // Entry 214: primary source is now ESPN's own live-blended totals
-        // from the mScoreboard view. Old manual sum (Entry 200/213's
-        // per-starter actual-or-projected math) is kept ONLY as a fallback
-        // for the rare case totalProjectedPointsLive comes back
-        // null/missing, and is logged alongside the official number so any
-        // future mismatch is visible immediately rather than silent.
         const roster = side.rosterForCurrentScoringPeriod;
         const officialActual = (typeof side.totalPointsLive === 'number') ? side.totalPointsLive : null;
         const officialProjected = (typeof side.totalProjectedPointsLive === 'number') ? side.totalProjectedPointsLive : null;
@@ -3353,23 +3505,45 @@ async function pullLiveMovementSnapshot(w) {
       });
     });
 
-    // Map to MANAGERS order — MANAGERS itself doesn't retain the ESPN team
-    // id, so re-derive from ESPN_ID_MAP the same way MANAGERS was built,
-    // guaranteeing identical order.
     const idsInOrder = Object.keys(ESPN_ID_MAP).map(Number);
     const actualVals = idsInOrder.map(id => (byTeam[id] ? byTeam[id].actual : 0));
     const projVals    = idsInOrder.map(id => (byTeam[id] ? byTeam[id].projected : 0));
 
-    MOV_GHOST = { week: w, actualVals, projVals, ts: new Date() };
+    // Entry 287 (session S048): was a single `liveIdx`, gated on "this
+    // session's kickoff has passed" for BOTH actual and projected — wrong
+    // for projected. Hanh caught it live: Thursday already resolved for
+    // real, Sunday hasn't kicked off yet, so there's genuinely no session
+    // "live" right now — but the PROJECTED table's own header says "prior
+    // to each session," meaning a projection for Sunday is valid and
+    // meaningful even before Sunday starts. Split into two separate ideas:
+    //
+    // nextUnresolvedIdx — the next session with no real actual data yet,
+    // regardless of whether it's kicked off. This is what "prior to"
+    // means, so the projected ghost uses this UNCONDITIONALLY.
+    //
+    // actualGhostIdx — only set (to nextUnresolvedIdx) when that session's
+    // real kickoff has ALREADY passed — an actual score requires an
+    // actual game in progress; showing one before kickoff would be
+    // fabricated, so this stays gated the way the original liveIdx was.
+    const now = new Date();
+    const actualForWk = MOV_DATA.actual[w] || [];
+    let nextUnresolvedIdx = -1;
+    CURRENT_WK_SCHEDULE.forEach((s, i) => { if (nextUnresolvedIdx < 0 && !actualForWk[i]) nextUnresolvedIdx = i; });
+    const nextHasKickedOff = nextUnresolvedIdx >= 0 && new Date(CURRENT_WK_SCHEDULE[nextUnresolvedIdx].kickoff) <= now;
+    const actualGhostIdx = nextHasKickedOff ? nextUnresolvedIdx : -1;
+    const projGhostIdx = nextUnresolvedIdx; // unconditional — a pre-game projection is valid even before kickoff
+
+    MOV_GHOST = { week: w, actualGhostIdx, projGhostIdx, actualVals, projVals, ts: new Date() };
     renderWkCard(w);
   } catch (err) {
     console.error('[Live Snapshot] pull failed:', err);
-    MOV_GHOST = { week: null, actualVals: null, projVals: null, ts: null };
+    MOV_GHOST = { week: null, actualGhostIdx: -1, projGhostIdx: -1, actualVals: null, projVals: null, ts: null };
     if (btn) btn.title = 'Live snapshot failed — try again';
   } finally {
     if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Live Snapshot'; }
   }
 }
+
 
 function renderMovement() {
   const container = document.getElementById('movement-weeks');
@@ -3497,7 +3671,7 @@ function setMovSort(w, table, key) {
   renderWkCard(w);
 }
 
-function renderMovTable(elId, w, table, data) {
+function renderMovTable(elId, w, table, data, sessionNames) {
   const lastIdx = (() => {
     for (let i = data.length - 1; i >= 0; i--) if (data[i]) return i;
     return -1;
@@ -3541,14 +3715,33 @@ function renderMovTable(elId, w, table, data) {
   });
 
   const arrow = key => sort.key===key ? (sort.dir>0?' ▲':' ▼') : '';
-  const headCells = SESSIONS_LABELS.map((label,s)=>{
+  // Entry 284 (session S048), Phase 4: was SESSIONS_LABELS.map(...) — the
+  // old fixed 7-column array. Now uses this WEEK's real session list
+  // (passed in as sessionNames), so a column only ever exists for a
+  // session that's actually real that week — matches Hanh's explicit
+  // "don't show empty game days" requirement, verified in the sandbox.
+  const headCells = sessionNames.map((name,s)=>{
     const resolved = !!data[s];
+    const label = SESSION_DISPLAY[name] || name;
     return `<th class="${resolved?'sortable':''}"${resolved?` data-k="${s}"`:''}>${label}<span class="si">${resolved?arrow(s):''}</span></th>`;
   }).join('');
 
   const rows = order.map(mi=>{
     const m = MANAGERS[mi];
-    const cells = data.map((sess)=>{
+    // Entry 286 (session S048): was `data.map(...)` — assumed data.length
+    // always equals sessionNames.length. True for real MOV_DATA (built
+    // that way in fetchESPNData()), but NOT true for a ghost series
+    // (Entry 285's buildGhostSeries() truncates at the ghost's own index,
+    // by design, so the sort logic and chart-gap guard have a real,
+    // meaningful "last index" to work with). That mismatch meant a
+    // projected-ghost row rendered with fewer <td> cells than the header
+    // had <th> cells — Hanh caught this live: the SUN MOR header existed,
+    // but the value rendered in the wrong visual column because the row
+    // was short. Iterating sessionNames.length (not data.length) always
+    // produces the right cell count, treating anything past the end of a
+    // short `data` array as simply unresolved — correct either way.
+    const cells = sessionNames.map((_, s) => {
+      const sess = data[s];
       if (!sess) return '<td class="empty">—</td>';
       const v = sess[mi];
       if (v === null || v === undefined) return '<td class="empty">—</td>';
@@ -3574,8 +3767,9 @@ function renderMovTable(elId, w, table, data) {
 }
 
 function renderWkCard(w) {
-  const actData  = MOV_DATA.actual[w]; // [7 sessions][10 managers], entries may be null if not yet happened
+  const actData  = MOV_DATA.actual[w]; // [N real sessions this week][10 managers], entries may be null if not yet happened
   const projData = MOV_DATA.proj[w];
+  const sessionNames = MOV_SESSIONS[w] || []; // Entry 284: this week's REAL session list, dynamic length
 
   // A session is "resolved" once its array of 10 manager values exists —
   // find the latest resolved index for each table independently (proj
@@ -3612,34 +3806,60 @@ function renderWkCard(w) {
 
   // Entry 237 (session S046): Hanh confirmed she wants the real column
   // table (WED/THU/FLEX/...), not a flat list — replaces Entry 235's
-  // ghostOnlyList() with a synthetic 7-session array (all null except
-  // index 0, the "next up" slot, filled from the ghost values) fed
-  // straight into the same renderMovTable() the real data uses. This
-  // reuses the real column headers, sort-by-column, and per-session "—"
-  // cells for free, instead of hand-building a second table layout.
-  const ghostAsTable = (elId, statusWord, vals) => {
-    const synthetic = Array(SESSIONS_LABELS.length).fill(null);
-    const liveIdx = currentLiveSessionIndex();
-    synthetic[liveIdx >= 0 ? liveIdx : 0] = vals; // place under whichever session is actually live right now
-    renderMovTable(elId, w, statusWord === 'completed' ? 'act' : 'proj', synthetic);
-    document.getElementById(elId).insertAdjacentHTML('afterbegin',
-      '<div style="font-size:10px;color:var(--mustard);margin:0 0 4px;">● live snapshot — no sessions ' + statusWord + ' yet</div>');
+  // ghostOnlyList() with a synthetic session array fed straight into the
+  // same renderMovTable() the real data uses. This reuses the real column
+  // headers, sort-by-column, and per-session "—" cells for free, instead
+  // of hand-building a second table layout.
+  // Entry 285/287 (session S048): the ACTUAL ghost and the PROJECTED ghost
+  // belong at DIFFERENT indices — a projection is naturally "prior to" the
+  // session it's projecting for, so it's valid even BEFORE that session
+  // kicks off (Entry 287: originally both were gated on "has this
+  // session's kickoff passed", wrong for projected — Thursday resolved for
+  // real and Sunday not yet started means there's genuinely no session
+  // "live", but a Sunday projection is still meaningful right then). Both
+  // indices are computed once, at pull time, in pullLiveMovementSnapshot().
+  //
+  // Entry 288 (session S048): was branching "if ANY real data exists for
+  // this table, show ONLY that — else show ONLY the ghost." Wrong — THU's
+  // real proj snapshot exists (written at THU's own kickoff, same as its
+  // real actual eventually will be), so `lastProjIdx >= 0` was true, and
+  // the ghost got bypassed ENTIRELY regardless of which index it pointed
+  // at. Real data and the ghost aren't alternatives, they're layers: real
+  // wherever it exists, the ghost filling in the one specific slot it's
+  // for, on top. buildDisplaySeries() merges them properly; nothing here
+  // is mutually exclusive anymore.
+  const actualGhostIdx = MOV_GHOST.actualGhostIdx;
+  const projGhostIdx = MOV_GHOST.projGhostIdx;
+  const buildDisplaySeries = (resolvedData, ghostIdx, ghostVals) => {
+    const series = sessionNames.map((_, i) => (resolvedData && resolvedData[i]) || null);
+    if (ghostIdx >= 0 && ghostIdx < series.length && !series[ghostIdx]) series[ghostIdx] = ghostVals;
+    return series;
   };
 
   // ── ACTUAL TABLE ──
-  if (lastActIdx >= 0) {
-    renderMovTable(`act-tbl-${w}`, w, 'act', actData);
-  } else if (hasGhostForWeek && MOV_GHOST.actualVals) {
-    ghostAsTable(`act-tbl-${w}`, 'completed', MOV_GHOST.actualVals);
+  const actGhostActive = hasGhostForWeek && !!MOV_GHOST.actualVals && actualGhostIdx >= 0 && !(actData && actData[actualGhostIdx]);
+  const actSeries = buildDisplaySeries(actData, actGhostActive ? actualGhostIdx : -1, MOV_GHOST.actualVals);
+  if (actSeries.some(Boolean)) {
+    renderMovTable(`act-tbl-${w}`, w, 'act', actSeries, sessionNames);
+    if (actGhostActive) {
+      const label = SESSION_DISPLAY[sessionNames[actualGhostIdx]] || sessionNames[actualGhostIdx];
+      document.getElementById(`act-tbl-${w}`).insertAdjacentHTML('afterbegin',
+        '<div style="font-size:10px;color:var(--mustard);margin:0 0 4px;">● live snapshot — ' + label + ' in progress, not final yet</div>');
+    }
   } else {
     document.getElementById(`act-tbl-${w}`).innerHTML = '<div style="padding:8px 0;font-size:11px;color:var(--text3);">No sessions completed yet.</div>';
   }
 
   // ── PROJ TABLE ──
-  if (lastProjIdx >= 0) {
-    renderMovTable(`proj-tbl-${w}`, w, 'proj', projData);
-  } else if (hasGhostForWeek && MOV_GHOST.projVals) {
-    ghostAsTable(`proj-tbl-${w}`, 'projected', MOV_GHOST.projVals);
+  const projGhostActive = hasGhostForWeek && !!MOV_GHOST.projVals && projGhostIdx >= 0 && !(projData && projData[projGhostIdx]);
+  const projSeries = buildDisplaySeries(projData, projGhostActive ? projGhostIdx : -1, MOV_GHOST.projVals);
+  if (projSeries.some(Boolean)) {
+    renderMovTable(`proj-tbl-${w}`, w, 'proj', projSeries, sessionNames);
+    if (projGhostActive) {
+      const label = SESSION_DISPLAY[sessionNames[projGhostIdx]] || sessionNames[projGhostIdx];
+      document.getElementById(`proj-tbl-${w}`).insertAdjacentHTML('afterbegin',
+        '<div style="font-size:10px;color:var(--mustard);margin:0 0 4px;">● live snapshot — early ' + label + ' projection</div>');
+    }
   } else {
     document.getElementById(`proj-tbl-${w}`).innerHTML = '<div style="padding:8px 0;font-size:11px;color:var(--text3);">No sessions projected yet.</div>';
   }
@@ -3650,17 +3870,24 @@ function renderWkCard(w) {
   // as one extra ghost point past whatever's actually resolved — styled
   // distinctly by drawMovBump (reduced opacity + pulsing ring + dashed
   // connector), never mixed into the real MOV_DATA/session-count logic.
-  const hasGhost = MOV_GHOST.week === w;
+  // Entry 288: the chart needs a dense, contiguous, real-values-only
+  // array (no nulls at any position) — takes the longest contiguous
+  // prefix of actSeries/projSeries starting at index 0, which naturally
+  // includes the ghost only when it's immediately adjacent to whatever's
+  // really resolved (showing "movement" into a point disconnected by a
+  // gap wouldn't mean anything visually anyway).
   requestAnimationFrame(()=>{
-    const actChartData  = lastActIdx  >= 0 ? actData.slice(0, lastActIdx+1)   : [];
-    const projChartData = lastProjIdx >= 0 ? projData.slice(0, lastProjIdx+1) : [];
-    let actGhostIdx = -1, projGhostIdx = -1;
-    if (hasGhost && MOV_GHOST.actualVals) { actChartData.push(MOV_GHOST.actualVals); actGhostIdx = actChartData.length - 1; }
-    if (hasGhost && MOV_GHOST.projVals)   { projChartData.push(MOV_GHOST.projVals);  projGhostIdx = projChartData.length - 1; }
+    const contiguousPrefixLen = series => { let n = 0; while (n < series.length && series[n]) n++; return n; };
+    const actLen = contiguousPrefixLen(actSeries);
+    const projLen = contiguousPrefixLen(projSeries);
+    const actChartData = actSeries.slice(0, actLen);
+    const projChartData = projSeries.slice(0, projLen);
+    const actGhostChartIdx  = (actGhostActive  && actualGhostIdx === actLen - 1)  ? actLen - 1  : -1;
+    const projGhostChartIdx = (projGhostActive && projGhostIdx   === projLen - 1) ? projLen - 1 : -1;
 
-    if (actChartData.length >= 2) drawMovBump(`act-bump-${w}`, actChartData, w, true, actGhostIdx);
+    if (actChartData.length >= 2) drawMovBump(`act-bump-${w}`, actChartData, sessionNames, w, true, actGhostChartIdx);
     else document.getElementById(`act-bump-${w}`).innerHTML = '';
-    if (projChartData.length >= 2) drawMovBump(`proj-bump-${w}`, projChartData, w, false, projGhostIdx);
+    if (projChartData.length >= 2) drawMovBump(`proj-bump-${w}`, projChartData, sessionNames, w, false, projGhostChartIdx);
     else document.getElementById(`proj-bump-${w}`).innerHTML = '';
   });
 }
@@ -3679,16 +3906,19 @@ function getRanksFromSnap(snapArr) {
   return ranks;
 }
 
-function drawMovBump(svgId, snapData, w, isActual, ghostIdx = -1) {
+function drawMovBump(svgId, snapData, sessionNames, w, isActual, ghostIdx = -1) {
   const svg = document.getElementById(svgId);
   if(!svg) return;
   const W = (svg && svg.parentElement ? svg.parentElement.clientWidth : 0) || 400;
-  // Entry 107: nSess now derives from the passed snapData's actual length,
-  // not the fixed global SESSIONS_LABELS.length — snapData may be a
-  // truncated, in-progress week (only the resolved sessions so far), and
-  // indexing past its end (the old behavior) would throw.
+  // Entry 107: nSess derives from the passed snapData's actual length —
+  // snapData may be a truncated, in-progress week (only the resolved
+  // sessions so far), and indexing past its end would throw.
+  // Entry 284 (session S048), Phase 4: sessLabels now comes from this
+  // week's REAL session list (sessionNames, passed in) instead of the old
+  // fixed SESSIONS_LABELS — a column only ever exists for a session that's
+  // actually real that week.
   const n = MANAGERS.length, nSess = snapData.length;
-  const sessLabels = SESSIONS_LABELS.slice(0, nSess);
+  const sessLabels = sessionNames.slice(0, nSess).map(name => SESSION_DISPLAY[name] || name);
   const padL=46, padR=72, padT=12, padB=18;
   const H = n*24 + padT + padB;
   svg.setAttribute('viewBox',`0 0 ${W} ${H}`);
