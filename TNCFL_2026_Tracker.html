@@ -1277,6 +1277,7 @@ function parseFAActivityFromTransactions(transData, playerNameMap) {
       offer: t.bidAmount || 0,
       result: success ? 'Added' : (t.status || 'Unsuccessful'),
       success,
+      date: t.proposedDate || null, // Entry 280 — raw ms timestamp, formatted at render time
     });
   });
   return byWeek;
@@ -2002,6 +2003,21 @@ function formatLastRefreshed(){
   const mm = String(LAST_REFRESHED.getMinutes()).padStart(2,'0');
   const ss = String(LAST_REFRESHED.getSeconds()).padStart(2,'0');
   return month + ' ' + dom + ', ' + year + ', ' + day + ', ' + hh + ':' + mm + ':' + ss;
+}
+
+// Entry 280 (session S048): compact date/time for a single FA Activity
+// claim — e.g. "Sep 16, 3:42 PM". Same browser-local-time convention as
+// formatLastRefreshed() above, just a shorter format for a table cell.
+function fmtClaimDate(ms) {
+  if (!ms) return '—';
+  const d = new Date(ms);
+  const month = d.toLocaleDateString('en-US', {month:'short'});
+  const day = d.getDate();
+  let h = d.getHours();
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  h = h % 12; if (h === 0) h = 12;
+  const mm = String(d.getMinutes()).padStart(2,'0');
+  return month + ' ' + day + ', ' + h + ':' + mm + ' ' + ampm;
 }
 
 async function refreshAllData(btn){
@@ -6550,6 +6566,7 @@ function renderFAActivity() {
     {key:'claim',  label:'Claim'},
     {key:'offer',  label:'Offer'},
     {key:'result', label:'Result'},
+    {key:'date',   label:'Date'},
   ];
 
   // Build collapsible week cards, newest first
@@ -6590,6 +6607,7 @@ function renderFAActivity() {
           case 'type':   cmp = a.pickupType.localeCompare(b.pickupType); break;
           case 'claim':  cmp = a.player.localeCompare(b.player); break;
           case 'result': cmp = a.result.localeCompare(b.result); break;
+          case 'date':   cmp = (a.date || 0) - (b.date || 0); break;
           default: cmp = 0;
         }
         // Same A-Z tie-break-by-team convention used everywhere else in
@@ -6620,10 +6638,11 @@ function renderFAActivity() {
           + '<td style="text-align:left;font-weight:'+fw+';color:'+c+';word-break:break-word;">'+r.player+'</td>'
           + '<td style="text-align:left;font-weight:'+fw+';color:'+c+';'+ellipsis+'">$'+Number(r.offer).toFixed(2)+'</td>'
           + '<td style="text-align:left;color:'+c+';font-size:11px;'+ellipsis+'">'+r.result+'</td>'
+          + '<td style="text-align:left;color:'+c+';font-size:11px;'+ellipsis+'">'+fmtClaimDate(r.date)+'</td>'
           + '</tr>';
       }).join('');
     } else {
-      tableRows = '<tr><td colspan="5" style="text-align:left;color:var(--text3);font-style:italic;padding:12px 8px;">No claims entered for this week yet.</td></tr>';
+      tableRows = '<tr><td colspan="6" style="text-align:left;color:var(--text3);font-style:italic;padding:12px 8px;">No claims entered for this week yet.</td></tr>';
     }
 
     const arrow = key => {
@@ -6644,8 +6663,8 @@ function renderFAActivity() {
       // Body
       + '<div style="display:'+(isOpen?'block':'none')+';">'
         + '<div style="overflow-x:auto;">'
-        + '<table class="fa-tbl" style="width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;min-width:640px;">'
-        + '<colgroup><col style="width:10%;"><col style="width:14%;"><col style="width:42%;"><col style="width:12%;"><col style="width:22%;"></colgroup>'
+        + '<table class="fa-tbl" style="width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;min-width:720px;">'
+        + '<colgroup><col style="width:9%;"><col style="width:11%;"><col style="width:36%;"><col style="width:10%;"><col style="width:18%;"><col style="width:16%;"></colgroup>'
         + '<thead><tr style="background:var(--bg2);">'
           + headCells
         + '</tr></thead>'
