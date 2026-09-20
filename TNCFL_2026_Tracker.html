@@ -6054,7 +6054,7 @@ function renderPickemBump() {
   PICKEM_DATA.forEach((entry, i) => {
     const r = lastRanks[i];
     if (!groupsByRank[r]) groupsByRank[r] = { y: yScale(r), members: [] };
-    groupsByRank[r].members.push({ name: entry.name, color: pickemColor(i, n) });
+    groupsByRank[r].members.push({ name: entry.name, color: pickemColor(i, n), wins: entry.weeklyWins[weeksToShow - 1] });
   });
   Object.values(groupsByRank).forEach(g => g.members.sort((a,b)=>a.name.localeCompare(b.name)));
   const lbls = Object.values(groupsByRank).sort((a,b)=>
@@ -6065,9 +6065,9 @@ function renderPickemBump() {
   let labels = '';
   lbls.forEach((L, gi) => {
     if (L.members.length === 1) {
-      labels += `<text x="${lblX}" y="${L.y+3}" font-size="9" font-weight="600" fill="${L.members[0].color}" font-family="Segoe UI,sans-serif">${L.members[0].name}</text>`;
+      labels += `<text x="${lblX}" y="${L.y+3}" font-size="9" font-weight="600" fill="${L.members[0].color}" font-family="Segoe UI,sans-serif">${L.members[0].name} <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
     } else {
-      labels += `<text class="pickem-tie-lbl" data-idx="${gi}" x="${lblX}" y="${L.y+3}" font-size="9" font-weight="600" fill="#ccc" font-family="Segoe UI,sans-serif" style="cursor:default;">${L.members.length} players</text>`;
+      labels += `<text class="pickem-tie-lbl" data-idx="${gi}" x="${lblX}" y="${L.y+3}" font-size="9" font-weight="600" fill="#ccc" font-family="Segoe UI,sans-serif" style="cursor:default;">${L.members.length} players <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
     }
   });
 
