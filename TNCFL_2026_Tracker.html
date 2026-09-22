@@ -5970,12 +5970,18 @@ function renderPickemBump() {
   const n = PICKEM_DATA.length;
   if (n === 0) { svg.innerHTML = ''; return; }
 
-  // Only chart weeks that have actually started real games — same
-  // real-kickoff-time principle as effectiveTxWeek()/Entry 153 elsewhere,
-  // not ESPN's own early-flipping period flag. Falls back to showing week 1
-  // only (flat, all zero) if nothing has kicked off yet, so the axis isn't empty.
-  const hasStarted = EARLIEST_KICKOFF_THIS_WK && new Date() >= EARLIEST_KICKOFF_THIS_WK;
-  const weeksToShow = hasStarted ? Math.max(1, CURRENT_WK) : 1;
+  // Only chart weeks that actually have real data. Previously this had its
+  // own hand-rolled hasStarted/CURRENT_WK check (EARLIEST_KICKOFF_THIS_WK vs
+  // now), which broke at the Week 2->3 boundary: once CURRENT_WK flipped to
+  // 3 but Week 3's games hadn't kicked off yet, hasStarted went false and
+  // weeksToShow collapsed to 1, hiding Week 2's already-complete results.
+  // This is the exact same bug class LIVE_WK was built to fix for
+  // Standings/Transactions/etc at the Week 1->2 boundary (see its
+  // definition above), so reuse it here instead of a second, separately
+  // maintained notion of "how many weeks are live." Math.max(1,...) keeps
+  // the same fallback the old code had: always show at least week 1 so the
+  // axis isn't empty pre-season.
+  const weeksToShow = Math.max(1, LIVE_WK);
 
   const W = 1200, H = Math.max(320, n * 16), padR = 70, padT = 16, padB = 26;
   // Entry 185 (2026-09-10): same AXIS_X/AXIS_GAP decoupling as Despair
