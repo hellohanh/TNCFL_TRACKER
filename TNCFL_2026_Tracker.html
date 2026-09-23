@@ -7015,7 +7015,19 @@ async function portalConfirmLock() {
     if (resp.status === 401) { handlePortalAuthFail(); return; }
     const data = await resp.json();
     if (data.ok) {
-      portalStatus('✓ Week ' + wk + ' locked in KV.', '#4ec79e');
+      // Previously this just showed a status message and stopped — TOTAL_WKS
+      // (and everything derived from it: Standings/HMOTW/Money/Playoffs, and
+      // the Recap generator's week dropdown) is only set once at page load,
+      // so the lock succeeding server-side didn't mean the page knew about
+      // it. That left every locked-week-dependent tab silently stale until
+      // someone remembered to hit the manual refresh icon — caught when a
+      // just-locked Week 2 still didn't appear in the Recap week picker.
+      // Re-running the same full refresh the header's refresh button uses
+      // closes that gap: the lock isn't "done" from the page's perspective
+      // until this data reload lands.
+      portalStatus('✓ Week ' + wk + ' locked in KV. Refreshing…', '#4ec79e');
+      await refreshAllData();
+      portalStatus('✓ Week ' + wk + ' locked and data refreshed.', '#4ec79e');
     } else {
       portalStatus('Error: ' + (data.error || 'Unknown'), '#e8686d');
     }
