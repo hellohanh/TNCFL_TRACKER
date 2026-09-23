@@ -5537,7 +5537,7 @@ const THEME_BANK = [
   'Stranger Things','Friends','The Office','Lord of the Rings','The Sopranos','Seinfeld',
   'Peaky Blinders','Dune','The Boys','Cobra Kai','Anchorman',"Ocean's Eleven",'Yellowstone','300',
 ];
-const THEMES_USED_2026 = ['Top Gun']; // Week 1 — Hanh's explicit choice, breaking the usual bookend-week no-theme convention on purpose
+const THEMES_USED_2026 = ['Top Gun', 'Rocky']; // Week 1: Top Gun; Week 2: Rocky
 
 // Storyline → curated theme fit (Entry 258). This is a first-pass creative
 // judgment call, not a computed/objective mapping — Hanh should feel free
@@ -5606,8 +5606,17 @@ function computeRecapStandings(wk) {
   const cumTransTrades = (name) => {
     const byWk = TRANS_BY_MANAGER_WK[name] || {};
     let trans = 0, trades = 0;
+    // Was `<= wk - 1`, which stops one week short of the week being
+    // recapped. TRANS_BY_MANAGER_WK's keys are the real/effective week
+    // number directly (0 = Week 00, 1 = Week 01, ... — same convention as
+    // WK_TRANS/renderTransactions()), NOT a 0-indexed-by-week scheme like
+    // m.pts/HMOTW_WK use elsewhere in this function. So for a Week 2 recap
+    // (wk=2), the old `<= 1` bound silently dropped everything filed under
+    // key 2 (Week 2 itself) — confirmed against the Transactions tab's real
+    // per-week breakdown (WK 01: 2, WK 02: 14, TOTAL: 16) and the Money
+    // tab's live per-manager trans counts, both of which this now matches.
     Object.keys(byWk).forEach(w2 => {
-      if (Number(w2) <= wk - 1) { trans += byWk[w2].trans; trades += byWk[w2].trades; }
+      if (Number(w2) <= wk) { trans += byWk[w2].trans; trades += byWk[w2].trades; }
     });
     return { trans, trades };
   };
@@ -5809,7 +5818,47 @@ In 4th place is <b style="color:#AED709">Aidan</b> with <b>162.48</b> points, 0 
 <b style="color:#FF9900">Hanh</b> has <b>121.18</b> points, 0 players received, 0 trans and 0 HMOTW; <b>-$490.00</b><br>
 <b style="color:#4AACED">D'lyn</b> has <b>106.08</b> points, 0 players received, 1 tran and 0 HMOTW; <b>-$492.00</b></p>`,
   },
-  // Week 2 recap added after Wed Sep 24 lock session
+  {
+    week: 2,
+    label: '',
+    title: 'Week 2',
+    body: `<p>🔔 <b>DING DING.</b> Round two, TNCFL, and the ring's already slick. This league doesn't hand out title belts easy — you climb into the ropes, you eat some shots, and every once in a while somebody lands one so clean the whole building goes quiet. Week 2 had exactly that moment. Cutman's on standby, the corners are working, and somewhere in the crowd a guy in a bathrobe is yelling about how he could've made that weight. Let's get to the tale of the tape.</p>
+
+<p>🥊 <b style="color:#E09E06">Kito</b> didn't just win Week 2 — he put the division on notice. Riding <b>Patrick Mahomes</b>' 34.98, <b>Jaxon Smith-Njigba</b>'s 42.5, and <b>Davante Adams</b>' 39.5, <b style="color:#E09E06">Kito</b> dropped <b>217.58 points</b> and walked away with his first <b>Double HMOTW</b> of the season — a statement knockout that snapped his own <b>4-week HMOTW drought</b> in the same swing. That's not a split decision. That's a corner throwing in the towel.</p>
+
+<p>🏆 And here's the part that should really get the league's attention: this isn't new territory for TNCFL. This is only the <b>third time in league history</b> the season has opened with back-to-back Double HMOTW weeks — the last two times, it kept going. <b>2021</b> ran it <b>Week 1 through Week 3</b>, a full three-fight streak. <b>2018</b> matched this year's current pace exactly, <b>Week 1 through Week 2</b>. History says these openers don't always stay a two-week story. Week 3's already circling the ring.</p>
+
+<p>📈 <b style="color:#E09E06">Kito</b>'s win did more than snap a drought — it was a statement climb up the card, jumping <b>5 spots to #3</b> and punching his way into the top 4 for the first time this season. Somebody had to make room, and that somebody was <b style="color:#AED709">Aidan</b>, knocked clean out of the money after Week 1's strong showing. Boxing doesn't do participation trophies, and neither does the top 4.</p>
+
+<p>🎬 Up at the top of the card, the belt changed hands. <b style="color:#05E632">Damian</b> overtook <b style="color:#F943D5">Tim</b> for the league lead — but don't call it a knockout. This one's a split decision: <b>374.74</b> to <b>372.00</b>, a lead of just <b>2.74 points</b>, the closest margin at the top all season. And <b style="color:#05E632">Damian</b>'s case for the belt isn't one big haymaker — it's two straight rounds scored the same way. <b>187.82</b> in Week 1, <b>186.92</b> in Week 2, both clearing 185 like it's nothing. Call him <b>Mr. Consistency</b> — he's not looking for the highlight-reel knockout, he's just winning every round on the cards.</p>
+
+<p>💧 Not everyone's getting a hero's walkout music, though. <b style="color:#B964F2">Ted</b> logged another week in <b>The MonTE Desert</b>, now sitting at <b>26 straight weeks</b> without an HMOTW — the longest active dry spell in the league and somehow still growing. And your commissioner isn't exactly toweling off in triumph either: I'm sitting dead last with zero HMOTWs through two weeks, and by my own count I'm one more quiet week away from a full season with no rain in sight. Somebody hand out umbrellas — the whole bottom of this bracket needs one.</p>
+
+<p>💸 The wire was loud this week — <b>14 transactions</b> across the league (16 on the season now), a real step up from Week 1's quiet two-move open. <b style="color:#B964F2">Ted</b> and <b style="color:#F943D5">Tim</b> were the busiest corners in the building, each logging 3 moves; <b style="color:#E09E06">Kito</b> matched them with 3 of his own on the way to his Week 2 explosion. The headline bid belonged to <b style="color:#AED709">Aidan</b>, who put up a max <b>$200</b> to land <b>Carson Wentz</b> off waivers — the priciest claim of the week by a mile. Free agency stayed busy too, with <b>Michael Penix Jr.</b>, <b>Tua Tagovailoa</b>, and <b>Dalton Schultz</b> among the notable zero-dollar pickups. The league's on pace to keep adding to the pot at a healthy clip if this activity holds.</p>
+
+<p>🔔 Round 3 is up next. Two straight weeks with a Double HMOTW — does the league make it three in a row, matching 2021's full run, or does somebody put the brakes on it here? Bell's about to ring.</p>
+
+<p>📋 <b>To the numbers, to the wall.</b><br>
+If the season were to end today, this will be the results:</p>
+
+<p>Total number of transactions: <b>16</b><br>
+Total number of players traded: <b>0</b><br>
+Total number of double HMOTW: <b>2</b></p>
+
+<p style="color:var(--text3);font-size:11px;">Amounts owed/won below include all transactions, side, playoff, and Super Bowl bets.</p>
+
+<p>In 1st place is <b style="color:#05E632">Damian</b> with <b>374.74</b> points, 0 players received, 0 trans and 0 HMOTW; <b>-$500.00</b><br>
+In 2nd place is <b style="color:#F943D5">Tim</b> with <b>372.00</b> points, 0 players received, 3 trans and 2 HMOTW; <b>-$306.00</b><br>
+In 3rd place is <b style="color:#E09E06">Kito</b> with <b>346.28</b> points, 0 players received, 3 trans and 2 HMOTW; <b>-$306.00</b><br>
+In 4th place is <b style="color:#2EEAEA">Kevin</b> with <b>334.32</b> points, 0 players received, 0 trans and 0 HMOTW; <b>-$500.00</b><br>
+<b style="color:#AED709">Aidan</b> has <b>303.22</b> points, 0 players received, 1 tran and 0 HMOTW; <b>-$502.00</b><br>
+<b style="color:#F54747">Tony</b> has <b>292.38</b> points, 0 players received, 3 trans and 0 HMOTW; <b>-$506.00</b><br>
+<b style="color:#6161F5">Randy</b> has <b>270.42</b> points, 0 players received, 1 tran and 0 HMOTW; <b>-$502.00</b><br>
+<b style="color:#B964F2">Ted</b> has <b>263.74</b> points, 0 players received, 3 trans and 0 HMOTW; <b>-$506.00</b><br>
+<b style="color:#4AACED">D'lyn</b> has <b>239.94</b> points, 0 players received, 2 trans and 0 HMOTW; <b>-$504.00</b><br>
+<b style="color:#FF9900">Hanh</b> has <b>231.04</b> points, 0 players received, 0 trans and 0 HMOTW; <b>-$500.00</b></p>`,
+  },
+  // Week 3 recap goes here after next lock session
   // ... and so on through Week 18
 ];
 
