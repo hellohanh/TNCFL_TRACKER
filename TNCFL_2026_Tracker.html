@@ -363,6 +363,7 @@ table.score th.bye-wk.sortable:hover{background:rgba(100,180,255,0.28);}
 .mov-snap-btn{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:700;padding:3px 10px 3px 8px;border-radius:999px;border:1px solid rgba(217,165,33,0.4);background:rgba(217,165,33,0.12);color:var(--mustard);cursor:pointer;font-family:inherit;}
 .mov-snap-btn:hover{background:rgba(217,165,33,0.2);}
 .mov-snap-btn:disabled{opacity:0.5;cursor:default;}
+.mov-schedule-banner{font-size:11px;color:var(--mustard);background:rgba(217,165,33,0.1);border:1px solid rgba(217,165,33,0.3);border-radius:var(--r);padding:8px 12px;margin:0 0 12px;}
 .mov-snap-btn svg{flex-shrink:0;}
 .mov-ghost-ts{font-size:9.5px;color:var(--text3);margin-top:2px;text-align:right;}
 .wk-chevron{font-size:14px;color:var(--text3);transition:transform .2s;}
@@ -1923,7 +1924,9 @@ async function fetchESPNData() {
     }
 
     // ── Weekly Movement: live snapshot fetch (Entry 107, 2026-09-09;
-    // rebuilt Entry 284, session S048 Phase 4) ─────────────────────────────
+    // rebuilt Entry 284, session S048 Phase 4; rebuilt again Entry 298 —
+    // full strip-and-rebuild after this class of bug recurred a third time
+    // at a week boundary) ────────────────────────────────────────────────
     // Populates MOV_DATA from the Worker's GET /snapshots/:week for every
     // week 1..CURRENT_WK — not just locked weeks. Hanh wants this visible
     // as the week progresses (shapes weekly recap positioning), so this is
@@ -1934,29 +1937,52 @@ async function fetchESPNData() {
     //
     // Entry 284: session lists are now per-week and dynamic, not the old
     // fixed 7-slot SESSION_KV_KEYS. For the CURRENT week, the real schedule
-    // (GET /week-schedule — the same one POST /submit-schedule above just
-    // refreshed) is the authoritative column list, since it correctly
-    // includes sessions that haven't resolved yet (a future Sunday game,
-    // say) — snapshot presence alone can't distinguish "no game this slot"
-    // from "game hasn't happened yet". For every OTHER (past) week, the
-    // snapshot response's own keys ARE the authoritative list — a fully-
-    // elapsed week has complete real data for every session it actually
-    // had, so nothing needs supplementing.
+    // (GET /week-schedule) is the authoritative column list, since it
+    // correctly includes sessions that haven't resolved yet (a future
+    // Sunday game, say) — snapshot presence alone can't distinguish "no
+    // game this slot" from "game hasn't happened yet". For every OTHER
+    // (past) week, the snapshot response's own keys ARE the authoritative
+    // list — a fully-elapsed week has complete real data for every session
+    // it actually had, so nothing needs supplementing.
+    //
+    // Entry 298: GET /week-schedule now takes ?week=CURRENT_WK and the
+    // Worker validates the stored blob actually matches — was previously
+    // trusted unconditionally, which silently served a STALE prior week's
+    // session list/kickoff times at the start of every new week, until
+    // some browser happened to successfully re-submit the new one. That
+    // stale-not-missing failure was invisible (looked like real data, was
+    // just wrong), and is the most likely explanation for live snapshots
+    // quietly not working right at a week boundary. MOV_SCHEDULE_STATUS
+    // now tracks exactly what happened (ok/stale/missing/error) so
+    // renderWkCard() can show an honest banner instead of guessing.
     try {
       MOV_DATA.actual = [];
       MOV_DATA.proj = [];
       MOV_SESSIONS.length = 0;
 
       let currentWkScheduleNames = null;
+      MOV_SCHEDULE_STATUS = { state: 'missing', detail: null };
       try {
-        const schedResp = await fetch(`${WORKER_URL}/week-schedule`);
+        const schedResp = await fetch(`${WORKER_URL}/week-schedule?week=${CURRENT_WK}`);
         if (schedResp.ok) {
           const schedData = await schedResp.json();
-          CURRENT_WK_SCHEDULE = schedData.sessions || [];
-          currentWkScheduleNames = CURRENT_WK_SCHEDULE.map(s => s.name);
+          if (schedData.stale) {
+            MOV_SCHEDULE_STATUS = { state: 'stale', detail: 'Worker has Week ' + schedData.storedWeek + "'s schedule, not Week " + CURRENT_WK + "'s yet." };
+          } else if (Array.isArray(schedData.sessions) && schedData.sessions.length) {
+            CURRENT_WK_SCHEDULE = schedData.sessions;
+            currentWkScheduleNames = CURRENT_WK_SCHEDULE.map(s => s.name);
+            MOV_SCHEDULE_STATUS = { state: 'ok', detail: null };
+          } else {
+            MOV_SCHEDULE_STATUS = { state: 'missing', detail: 'Worker returned an empty schedule for Week ' + CURRENT_WK + '.' };
+          }
+        } else if (schedResp.status === 404) {
+          MOV_SCHEDULE_STATUS = { state: 'missing', detail: 'No schedule submitted to the Worker yet this week.' };
+        } else {
+          MOV_SCHEDULE_STATUS = { state: 'error', detail: 'Worker returned status ' + schedResp.status + '.' };
         }
       } catch (schedFetchErr) {
-        console.warn('[Weekly Movement] week-schedule fetch failed — current week will fall back to snapshot-presence-only session list.', schedFetchErr);
+        MOV_SCHEDULE_STATUS = { state: 'error', detail: schedFetchErr.message };
+        console.warn('[Weekly Movement] week-schedule fetch failed.', schedFetchErr);
       }
 
       for (let w = 1; w <= CURRENT_WK; w++) {
@@ -1988,6 +2014,16 @@ async function fetchESPNData() {
         }
       }
       console.info('[Weekly Movement] Synced snapshot data through Week ' + CURRENT_WK);
+
+      // Entry 298: auto-pull the persisted live snapshot (Worker-computed,
+      // shared by every viewer — see GET /live-snapshot/:week) on every
+      // page load, instead of requiring a manual client-side pull. Only
+      // meaningful when the schedule validated OK above — without a real
+      // session list there's no way to know which slot the live numbers
+      // belong to, so this deliberately skips rather than guessing.
+      if (MOV_SCHEDULE_STATUS.state === 'ok' && CURRENT_WK > 0) {
+        await refreshLiveMovementSnapshot(CURRENT_WK - 1, { silent: true });
+      }
     } catch (movErr) {
       console.warn('[Weekly Movement] snapshot sync failed — MOV_DATA left as-is.', movErr);
     }
@@ -3346,107 +3382,59 @@ const MOV_SESSIONS = []; // MOV_SESSIONS[w] = ['THU','SUN_MOR',...] for that wee
 // when do they kick off" source for the live-detection logic below.
 let CURRENT_WK_SCHEDULE = [];
 
-// MOV_GHOST — ephemeral "Live Snapshot" state (Entry 198, 2026-09-10;
-// reshaped Entry 284 for the dynamic model — sessionName/liveIdx replace
-// the old assumption that a ghost always belongs at a fixed index).
-// NOT persisted anywhere — lives only in this JS variable, overwritten on
-// every click, gone on tab switch or page reload. Never written to the
-// Worker/KV, unlike the real session snapshots in MOV_DATA. Deliberately
-// separate from MOV_DATA so there's no risk of ghost data ever being
-// mistaken for or bleeding into the real, locked-in snapshot history.
-let MOV_GHOST = { week: null, actualGhostIdx: -1, projGhostIdx: -1, actualVals: null, projVals: null, ts: null };
+// MOV_LIVE — persisted "live snapshot" state (Entry 198, 2026-09-10;
+// reshaped Entry 284 for the dynamic model; rebuilt Entry 298 to be
+// server-persisted instead of ephemeral, per Hanh's explicit choice —
+// "anyone viewing the site sees live progress automatically" — after the
+// old client-only ghost kept silently breaking at week boundaries).
+// Populated from the Worker's GET /live-snapshot/:week (computed
+// server-side, cached with a short TTL, shared by every viewer) instead of
+// a raw ESPN fetch made in this one browser. Still not part of MOV_DATA —
+// deliberately kept separate so there's no risk of live/provisional data
+// ever being mistaken for or bleeding into a real, Worker-locked snapshot.
+let MOV_LIVE = { week: null, actualGhostIdx: -1, projGhostIdx: -1, actualVals: null, projVals: null, capturedAt: null };
+
+// MOV_SCHEDULE_STATUS — Entry 298. Tracks exactly why CURRENT_WK_SCHEDULE
+// is or isn't usable this page load: 'ok' | 'stale' | 'missing' | 'error',
+// plus a human-readable `detail`. Previously there was no such tracking at
+// all — a failed/stale schedule fetch just left CURRENT_WK_SCHEDULE empty
+// (or, worse, silently stale) with nothing in the UI explaining why Live
+// Snapshot wasn't working. renderWkCard() shows this directly as a banner
+// on the current week's card instead of guessing or staying silent.
+let MOV_SCHEDULE_STATUS = { state: 'missing', detail: null };
 
 // Entry 284/287/288 (session S048), Phase 4 + follow-up fixes: rebuilt on
 // the dynamic session model — verified in Weekly_Movement_Sandbox.html
 // (Entries 282-283) before porting back, then corrected twice more against
 // real live behavior (Entries 287-288: the actual/projected ghosts belong
 // at different indices, and real data + the ghost must merge rather than
-// be mutually exclusive). The old version briefly stayed commented out as
-// a reference during the redesign; fully removed (Entry 289) once this was
-// verified stable in production — see SESSION_LEDGER.md Entries 284-288
-// for the full record if it's ever needed again.
+// be mutually exclusive).
+// Entry 298: full rebuild of the FETCH side (this function used to do its
+// own raw ESPN multi-view fetch client-side; now calls the Worker's
+// GET /live-snapshot/:week, which does that same ESPN call server-side —
+// see computeLiveSnapshot() in worker.js). The "which session does this
+// data belong to" logic below (nextUnresolvedIdx / actualGhostIdx /
+// projGhostIdx) is UNCHANGED from Entry 287/288 — that part was already
+// correct; only the fragile, silently-failing data SOURCE needed rebuilding.
 // Determines WHICH session the live pull actually represents (the
 // latest one whose real kickoff has passed but has no real actual data
-// yet) from CURRENT_WK_SCHEDULE + MOV_DATA, instead of the old render-time
-// guess. The ESPN fetch/mapping-to-MANAGERS-order logic itself is
-// unchanged — ESPN's own live-blended totals were already correct; only
-// the "what session is this for" question was ever wrong.
-async function pullLiveMovementSnapshot(w) {
-  if (w !== CURRENT_WK - 1) return; // only the current week's card has the button, but guard anyway
+// yet) from CURRENT_WK_SCHEDULE + MOV_DATA.
+async function refreshLiveMovementSnapshot(w, opts) {
+  opts = opts || {};
+  if (w !== CURRENT_WK - 1) return; // only the current week has a live snapshot
+  if (MOV_SCHEDULE_STATUS.state !== 'ok') return; // can't place the data without a valid schedule — banner explains why
   const btn = document.getElementById('mov-snap-btn-' + w);
-  if (btn) { btn.disabled = true; btn.querySelector('span').textContent = 'Pulling…'; }
+  if (btn && !opts.silent) { btn.disabled = true; btn.querySelector('span').textContent = 'Refreshing…'; }
   try {
-    const pv = '2f7cc8c5b1548d2fe5b45e1076eb388927b0a204';
-    const multiViewUrl = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/segments/0/leagues/${CFG.LEAGUE_ID}` +
-      `?scoringPeriodId=${CURRENT_WK}&view=mMatchup&view=mMatchupScore&view=mScoreboard&platformVersion=${pv}`;
-    const resp = await espnFetch(multiViewUrl);
-    if (!resp.ok) throw new Error('ESPN fetch not ok (' + resp.status + ')');
+    const resp = await fetch(`${WORKER_URL}/live-snapshot/${CURRENT_WK}`);
+    if (!resp.ok) throw new Error('Worker live-snapshot fetch not ok (' + resp.status + ')');
     const data = await resp.json();
-
-    const byTeam = {}; // teamId → { actual, projected }
-    const teamNameById = {};
-    Object.entries(ESPN_ID_MAP).forEach(([espnId, meta]) => { teamNameById[espnId] = meta.name; });
-    (data.schedule || []).forEach(m => {
-      if (m.matchupPeriodId !== CURRENT_WK) return;
-      [m.away, m.home].forEach(side => {
-        if (!side || !side.teamId) return;
-        const roster = side.rosterForCurrentScoringPeriod;
-        const officialActual = (typeof side.totalPointsLive === 'number') ? side.totalPointsLive : null;
-        const officialProjected = (typeof side.totalProjectedPointsLive === 'number') ? side.totalProjectedPointsLive : null;
-
-        let manualProjected = 0;
-        const breakdown = [];
-        if (roster && roster.entries) {
-          roster.entries.forEach(entry => {
-            const slot = entry.lineupSlotId;
-            const isBenchOrIR = slot === 20 || slot === 21;
-            const stats = (entry.playerPoolEntry && entry.playerPoolEntry.player && entry.playerPoolEntry.player.stats) || [];
-            const actualStat = stats.find(s => s.scoringPeriodId === CURRENT_WK && s.statSourceId === 0);
-            const projStat   = stats.find(s => s.scoringPeriodId === CURRENT_WK && s.statSourceId === 1);
-            const chosen = (actualStat ? actualStat.appliedTotal : (projStat ? projStat.appliedTotal : 0)) || 0;
-            breakdown.push({
-              player: entry.playerPoolEntry?.player?.fullName || '(unknown)',
-              lineupSlotId: slot,
-              excluded: isBenchOrIR,
-              actualStatTotal: actualStat ? actualStat.appliedTotal : null,
-              projStatTotal: projStat ? projStat.appliedTotal : null,
-              counted: isBenchOrIR ? 0 : chosen,
-            });
-            if (!isBenchOrIR) manualProjected += chosen;
-          });
-        }
-
-        const actual = officialActual !== null ? officialActual : ((roster ? roster.appliedStatTotal : 0) || 0);
-        const projected = officialProjected !== null ? officialProjected : manualProjected;
-        byTeam[side.teamId] = { actual, projected };
-
-        const teamLabel = teamNameById[side.teamId] || ('teamId ' + side.teamId);
-        console.info(`[Live Snapshot] ${teamLabel} — totalPointsLive: ${officialActual}, totalProjectedPointsLive: ${officialProjected}` +
-          (officialProjected === null ? ' (MISSING — fell back to manual sum: ' + manualProjected + ')' : ` (manual sum for comparison: ${manualProjected})`));
-        console.table(breakdown);
-      });
-    });
+    if (!data.live) throw new Error(data.error || 'Worker could not compute a live snapshot');
 
     const idsInOrder = Object.keys(ESPN_ID_MAP).map(Number);
-    const actualVals = idsInOrder.map(id => (byTeam[id] ? byTeam[id].actual : 0));
-    const projVals    = idsInOrder.map(id => (byTeam[id] ? byTeam[id].projected : 0));
+    const actualVals = idsInOrder.map(id => data.actual[ESPN_ID_MAP[id].name] ?? 0);
+    const projVals    = idsInOrder.map(id => data.projected[ESPN_ID_MAP[id].name] ?? 0);
 
-    // Entry 287 (session S048): was a single `liveIdx`, gated on "this
-    // session's kickoff has passed" for BOTH actual and projected — wrong
-    // for projected. Hanh caught it live: Thursday already resolved for
-    // real, Sunday hasn't kicked off yet, so there's genuinely no session
-    // "live" right now — but the PROJECTED table's own header says "prior
-    // to each session," meaning a projection for Sunday is valid and
-    // meaningful even before Sunday starts. Split into two separate ideas:
-    //
-    // nextUnresolvedIdx — the next session with no real actual data yet,
-    // regardless of whether it's kicked off. This is what "prior to"
-    // means, so the projected ghost uses this UNCONDITIONALLY.
-    //
-    // actualGhostIdx — only set (to nextUnresolvedIdx) when that session's
-    // real kickoff has ALREADY passed — an actual score requires an
-    // actual game in progress; showing one before kickoff would be
-    // fabricated, so this stays gated the way the original liveIdx was.
     const now = new Date();
     const actualForWk = MOV_DATA.actual[w] || [];
     let nextUnresolvedIdx = -1;
@@ -3455,16 +3443,16 @@ async function pullLiveMovementSnapshot(w) {
     const actualGhostIdx = nextHasKickedOff ? nextUnresolvedIdx : -1;
     const projGhostIdx = nextUnresolvedIdx; // unconditional — a pre-game projection is valid even before kickoff
 
-    MOV_GHOST = { week: w, actualGhostIdx, projGhostIdx, actualVals, projVals, ts: new Date() };
+    MOV_LIVE = { week: w, actualGhostIdx, projGhostIdx, actualVals, projVals, capturedAt: data.capturedAt, stale: !!data.stale };
     renderWkCard(w);
   } catch (err) {
-    console.error('[Live Snapshot] pull failed:', err);
-    MOV_GHOST = { week: null, actualGhostIdx: -1, projGhostIdx: -1, actualVals: null, projVals: null, ts: null };
+    console.error('[Live Snapshot] refresh failed:', err);
     if (btn) btn.title = 'Live snapshot failed — try again';
   } finally {
-    if (btn) { btn.disabled = false; btn.querySelector('span').textContent = 'Live Snapshot'; }
+    if (btn && !opts.silent) { btn.disabled = false; btn.querySelector('span').textContent = 'Refresh Live'; }
   }
 }
+
 
 
 function renderMovement() {
@@ -3515,6 +3503,24 @@ function renderMovement() {
     }
     const card = document.createElement('div');
     card.className = 'wk-collapse';
+    // Entry 298: label/behavior changed from "Live Snapshot" (implying a
+    // one-off, gone-on-refresh pull) to "Refresh Live" — the data now
+    // auto-loads for every viewer via the Worker (see fetchESPNData()),
+    // this button just forces an immediate on-demand recheck rather than
+    // waiting for the Worker's short cache TTL to expire naturally.
+    // Disabled (not hidden) with an explanatory title when the schedule
+    // isn't usable this page load, instead of silently doing nothing on
+    // click the way the old version did.
+    const scheduleOk = MOV_SCHEDULE_STATUS.state === 'ok';
+    const snapBtnHtml = w === CURRENT_WK - 1
+      ? `<button class="mov-snap-btn" ${scheduleOk ? '' : 'disabled'} onclick="event.stopPropagation();refreshLiveMovementSnapshot(${w})" id="mov-snap-btn-${w}" title="${scheduleOk ? 'Force an immediate live refresh — everyone viewing the site shares this data' : 'Unavailable: ' + (MOV_SCHEDULE_STATUS.detail || 'this week has no schedule loaded yet')}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg><span>Refresh Live</span></button>`
+      : '';
+    // Entry 298: honest banner instead of silent failure when this week's
+    // schedule isn't usable — same info the disabled button's title
+    // carries, surfaced where it's actually visible without hovering.
+    const scheduleBannerHtml = (w === CURRENT_WK - 1 && !scheduleOk)
+      ? `<div class="mov-schedule-banner">⚠️ Live data unavailable this session: ${MOV_SCHEDULE_STATUS.detail || 'schedule not loaded'}. Locked/past-session data below is unaffected.</div>`
+      : '';
     card.innerHTML = `
       <div class="wk-collapse-header${isOpen?' open':''}" onclick="toggleWkCard(${w})">
         <div class="wk-col-left">
@@ -3524,13 +3530,14 @@ function renderMovement() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;">
           <div class="wk-col-badges">
-            ${w===CURRENT_WK-1?'<button class="mov-snap-btn" onclick="event.stopPropagation();pullLiveMovementSnapshot('+w+')" id="mov-snap-btn-'+w+'" title="Pull a live snapshot — not saved, gone on refresh"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg><span>Live Snapshot</span></button>':''}
+            ${snapBtnHtml}
             ${hmotwBadge}
           </div>
           <div class="wk-chevron${isOpen?' open':''}">▼</div>
         </div>
       </div>
       <div class="wk-collapse-body${isOpen?' open':''}" id="wk-body-${w}">
+        ${scheduleBannerHtml}
         <div class="mov-grid">
           <div>
             <div class="mov-section-label">Actual accumulated score — <span>after each session</span></div>
@@ -3708,7 +3715,7 @@ function renderWkCard(w) {
   const lastActIdx  = lastResolved(actData);
   const lastProjIdx = lastResolved(projData);
 
-  const hasGhostForWeek = MOV_GHOST.week === w;
+  const hasGhostForWeek = MOV_LIVE.week === w;
 
   // Entry 236 (session S046): removed the whole-body-wipe early-return
   // that used to sit here for "nothing resolved yet, no ghost." It
@@ -3739,7 +3746,7 @@ function renderWkCard(w) {
   // session's kickoff passed", wrong for projected — Thursday resolved for
   // real and Sunday not yet started means there's genuinely no session
   // "live", but a Sunday projection is still meaningful right then). Both
-  // indices are computed once, at pull time, in pullLiveMovementSnapshot().
+  // indices are computed once, at pull time, in refreshLiveMovementSnapshot().
   //
   // Entry 288 (session S048): was branching "if ANY real data exists for
   // this table, show ONLY that — else show ONLY the ghost." Wrong — THU's
@@ -3750,8 +3757,8 @@ function renderWkCard(w) {
   // wherever it exists, the ghost filling in the one specific slot it's
   // for, on top. buildDisplaySeries() merges them properly; nothing here
   // is mutually exclusive anymore.
-  const actualGhostIdx = MOV_GHOST.actualGhostIdx;
-  const projGhostIdx = MOV_GHOST.projGhostIdx;
+  const actualGhostIdx = MOV_LIVE.actualGhostIdx;
+  const projGhostIdx = MOV_LIVE.projGhostIdx;
   const buildDisplaySeries = (resolvedData, ghostIdx, ghostVals) => {
     const series = sessionNames.map((_, i) => (resolvedData && resolvedData[i]) || null);
     if (ghostIdx >= 0 && ghostIdx < series.length && !series[ghostIdx]) series[ghostIdx] = ghostVals;
@@ -3759,8 +3766,8 @@ function renderWkCard(w) {
   };
 
   // ── ACTUAL TABLE ──
-  const actGhostActive = hasGhostForWeek && !!MOV_GHOST.actualVals && actualGhostIdx >= 0 && !(actData && actData[actualGhostIdx]);
-  const actSeries = buildDisplaySeries(actData, actGhostActive ? actualGhostIdx : -1, MOV_GHOST.actualVals);
+  const actGhostActive = hasGhostForWeek && !!MOV_LIVE.actualVals && actualGhostIdx >= 0 && !(actData && actData[actualGhostIdx]);
+  const actSeries = buildDisplaySeries(actData, actGhostActive ? actualGhostIdx : -1, MOV_LIVE.actualVals);
   if (actSeries.some(Boolean)) {
     renderMovTable(`act-tbl-${w}`, w, 'act', actSeries, sessionNames);
     if (actGhostActive) {
@@ -3773,8 +3780,8 @@ function renderWkCard(w) {
   }
 
   // ── PROJ TABLE ──
-  const projGhostActive = hasGhostForWeek && !!MOV_GHOST.projVals && projGhostIdx >= 0 && !(projData && projData[projGhostIdx]);
-  const projSeries = buildDisplaySeries(projData, projGhostActive ? projGhostIdx : -1, MOV_GHOST.projVals);
+  const projGhostActive = hasGhostForWeek && !!MOV_LIVE.projVals && projGhostIdx >= 0 && !(projData && projData[projGhostIdx]);
+  const projSeries = buildDisplaySeries(projData, projGhostActive ? projGhostIdx : -1, MOV_LIVE.projVals);
   if (projSeries.some(Boolean)) {
     renderMovTable(`proj-tbl-${w}`, w, 'proj', projSeries, sessionNames);
     if (projGhostActive) {
