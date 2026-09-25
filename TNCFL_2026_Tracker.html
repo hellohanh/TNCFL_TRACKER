@@ -2014,16 +2014,6 @@ async function fetchESPNData() {
         }
       }
       console.info('[Weekly Movement] Synced snapshot data through Week ' + CURRENT_WK);
-
-      // Entry 298: auto-pull the persisted live snapshot (Worker-computed,
-      // shared by every viewer — see GET /live-snapshot/:week) on every
-      // page load, instead of requiring a manual client-side pull. Only
-      // meaningful when the schedule validated OK above — without a real
-      // session list there's no way to know which slot the live numbers
-      // belong to, so this deliberately skips rather than guessing.
-      if (MOV_SCHEDULE_STATUS.state === 'ok' && CURRENT_WK > 0) {
-        await refreshLiveMovementSnapshot(CURRENT_WK - 1, { silent: true });
-      }
     } catch (movErr) {
       console.warn('[Weekly Movement] snapshot sync failed — MOV_DATA left as-is.', movErr);
     }
@@ -2039,6 +2029,22 @@ async function fetchESPNData() {
     const grEl = document.getElementById('global-last-refreshed');
     if (grEl) grEl.textContent = 'Last Refreshed: ' + formatLastRefreshed();
     renderAll();
+
+    // Entry 298 (fixed after a live crash — see comment on
+    // refreshLiveMovementSnapshot): auto-pull the persisted live snapshot
+    // (Worker-computed, shared by every viewer) AFTER renderAll(), not
+    // before. renderWkCard()/renderMovTable() write into DOM containers
+    // (act-tbl-${w}, etc.) that renderMovement() creates — calling this
+    // beforehand meant those containers didn't exist yet on a fresh page
+    // load, throwing "Cannot set properties of null" the moment this tried
+    // to update the DOM. Same failure mode Entry 236 already fixed once
+    // for the old ghost pattern; reintroduced here by calling it too early
+    // in the sequence, now corrected. Only meaningful when the schedule
+    // validated OK above — without a real session list there's no way to
+    // know which slot the live numbers belong to.
+    if (MOV_SCHEDULE_STATUS.state === 'ok' && CURRENT_WK > 0) {
+      await refreshLiveMovementSnapshot(CURRENT_WK - 1, { silent: true });
+    }
 
   } catch (err) {
     console.error('ESPN fetch error:', err);
