@@ -3447,7 +3447,25 @@ async function refreshLiveMovementSnapshot(w, opts) {
     CURRENT_WK_SCHEDULE.forEach((s, i) => { if (nextUnresolvedIdx < 0 && !actualForWk[i]) nextUnresolvedIdx = i; });
     const nextHasKickedOff = nextUnresolvedIdx >= 0 && new Date(CURRENT_WK_SCHEDULE[nextUnresolvedIdx].kickoff) <= now;
     const actualGhostIdx = nextHasKickedOff ? nextUnresolvedIdx : -1;
-    const projGhostIdx = nextUnresolvedIdx; // unconditional — a pre-game projection is valid even before kickoff
+    // Entry 298 (further correction, per Hanh — this regressed during the
+    // rebuild): the projected ghost is always "the NEXT session's early
+    // projection," distinct from wherever the actual ghost currently is —
+    // established, working behavior before this rebuild. Was unconditionally
+    // `nextUnresolvedIdx`, which put BOTH ghosts on the SAME session
+    // (Thursday) while Thursday is live, leaving Sunday's projection
+    // blank until Thursday's real actual data got recorded separately.
+    // When a session is currently live (actualGhostIdx valid), the
+    // projection ghost is the slot right after it — the live pull's
+    // projected total is a single whole-week number regardless of which
+    // column it's shown under, so this is a placement fix, not a data
+    // change. Falls back to nextUnresolvedIdx directly when nothing's
+    // currently live (matches the original pre-kickoff case). Bounds-
+    // checked: no next slot this week (e.g. MNF is the last session and
+    // it's already live) means no projection ghost to show.
+    const afterCurrentIdx = actualGhostIdx >= 0 ? actualGhostIdx + 1 : -1;
+    const projGhostIdx = (afterCurrentIdx >= 0 && afterCurrentIdx < CURRENT_WK_SCHEDULE.length)
+      ? afterCurrentIdx
+      : (actualGhostIdx >= 0 ? -1 : nextUnresolvedIdx);
 
     MOV_LIVE = { week: w, actualGhostIdx, projGhostIdx, actualVals, projVals, capturedAt: data.capturedAt, stale: !!data.stale };
     renderWkCard(w);
