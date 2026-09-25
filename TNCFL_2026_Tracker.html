@@ -3430,9 +3430,13 @@ async function refreshLiveMovementSnapshot(w, opts) {
   if (w !== CURRENT_WK - 1) return; // only the current week has a live snapshot
   if (MOV_SCHEDULE_STATUS.state !== 'ok') return; // can't place the data without a valid schedule — banner explains why
   const btn = document.getElementById('mov-snap-btn-' + w);
-  if (btn && !opts.silent) { btn.disabled = true; btn.querySelector('span').textContent = 'Refreshing…'; }
+  if (btn && !opts.silent) { btn.disabled = true; btn.querySelector('span').textContent = 'Pulling…'; }
   try {
-    const resp = await fetch(`${WORKER_URL}/live-snapshot/${CURRENT_WK}`);
+    // Entry 298 follow-up: explicit clicks force-bypass the Worker's
+    // short cache (?force=1) so the button always pulls fresh data —
+    // silent auto-loads (page open) omit it and benefit from the cache.
+    const forceParam = opts.silent ? '' : '?force=1';
+    const resp = await fetch(`${WORKER_URL}/live-snapshot/${CURRENT_WK}${forceParam}`);
     if (!resp.ok) throw new Error('Worker live-snapshot fetch not ok (' + resp.status + ')');
     const data = await resp.json();
     if (!data.live) throw new Error(data.error || 'Worker could not compute a live snapshot');
@@ -3473,7 +3477,7 @@ async function refreshLiveMovementSnapshot(w, opts) {
     console.error('[Live Snapshot] refresh failed:', err);
     if (btn) btn.title = 'Live snapshot failed — try again';
   } finally {
-    if (btn && !opts.silent) { btn.disabled = false; btn.querySelector('span').textContent = 'Refresh Live'; }
+    if (btn && !opts.silent) { btn.disabled = false; btn.querySelector('span').textContent = 'Live Snapshot'; }
   }
 }
 
@@ -3527,17 +3531,18 @@ function renderMovement() {
     }
     const card = document.createElement('div');
     card.className = 'wk-collapse';
-    // Entry 298: label/behavior changed from "Live Snapshot" (implying a
-    // one-off, gone-on-refresh pull) to "Refresh Live" — the data now
-    // auto-loads for every viewer via the Worker (see fetchESPNData()),
-    // this button just forces an immediate on-demand recheck rather than
-    // waiting for the Worker's short cache TTL to expire naturally.
+    // Entry 298: label kept as "Live Snapshot" (Hanh's explicit call —
+    // matches last week's established badge) even though the underlying
+    // data now auto-loads for every viewer via the Worker (see
+    // fetchESPNData()) rather than being purely a one-off client pull;
+    // clicking it still does exactly what it always did — pulls fresh
+    // numbers right now, shared by everyone once cached.
     // Disabled (not hidden) with an explanatory title when the schedule
     // isn't usable this page load, instead of silently doing nothing on
     // click the way the old version did.
     const scheduleOk = MOV_SCHEDULE_STATUS.state === 'ok';
     const snapBtnHtml = w === CURRENT_WK - 1
-      ? `<button class="mov-snap-btn" ${scheduleOk ? '' : 'disabled'} onclick="event.stopPropagation();refreshLiveMovementSnapshot(${w})" id="mov-snap-btn-${w}" title="${scheduleOk ? 'Force an immediate live refresh — everyone viewing the site shares this data' : 'Unavailable: ' + (MOV_SCHEDULE_STATUS.detail || 'this week has no schedule loaded yet')}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg><span>Refresh Live</span></button>`
+      ? `<button class="mov-snap-btn" ${scheduleOk ? '' : 'disabled'} onclick="event.stopPropagation();refreshLiveMovementSnapshot(${w})" id="mov-snap-btn-${w}" title="${scheduleOk ? 'Pull a live snapshot — click to refresh the numbers now' : 'Unavailable: ' + (MOV_SCHEDULE_STATUS.detail || 'this week has no schedule loaded yet')}"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg><span>Live Snapshot</span></button>`
       : '';
     // Entry 298: honest banner instead of silent failure when this week's
     // schedule isn't usable — same info the disabled button's title
