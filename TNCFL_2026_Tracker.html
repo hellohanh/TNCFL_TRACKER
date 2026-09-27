@@ -93,37 +93,67 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 
 /* Pick'em standings table (Entry 299) */
 .pickem-table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);overflow-x:auto;}
-.pickem-table{border-collapse:collapse;width:100%;font-size:12.5px;}
+.pickem-table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:12.5px;}
 .pickem-table thead th{
-  text-align:left;padding:10px 14px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;
+  text-align:left;padding:8px 6px;font-size:10px;font-weight:700;letter-spacing:0.04em;
   text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);
-  white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--bg2);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  cursor:pointer;user-select:none;position:sticky;top:0;background:var(--bg2);
 }
 .pickem-table thead th:hover{color:var(--text2);}
 .pickem-table thead th.sorted{color:var(--mustard);}
 .pickem-table thead th .arrow{margin-left:4px;font-size:9px;opacity:0.35;}
 .pickem-table thead th.sorted .arrow{opacity:1;}
-.pickem-table .matchup-label{display:flex;align-items:center;gap:4px;}
-.pickem-table .matchup-label img{width:14px;height:14px;object-fit:contain;}
-.pickem-table .matchup-label .at{color:var(--text3);font-weight:400;text-transform:none;font-size:9px;}
+.pickem-table thead th.matchup-th{text-align:center;padding:8px 2px;}
+.pickem-table .pk-filter-icon{margin-left:5px;font-size:9px;opacity:0.45;cursor:pointer;display:inline-block;}
+.pickem-table .pk-filter-icon:hover{opacity:0.9;}
+.pickem-table .pk-filter-icon.active{opacity:1;color:var(--mustard);}
+.pk-filter-popover{
+  position:fixed;z-index:9999;background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);width:200px;
+  font-size:12px;color:var(--text);display:none;text-transform:none;letter-spacing:normal;
+  cursor:default;font-weight:400;
+}
+.pk-filter-popover .pkf-search{width:100%;box-sizing:border-box;padding:6px 8px;border:none;
+  border-bottom:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;
+  border-radius:var(--r) var(--r) 0 0;outline:none;}
+.pk-filter-popover .pkf-list{max-height:220px;overflow-y:auto;padding:6px 4px;}
+.pk-filter-popover .pkf-row{display:flex;align-items:center;gap:7px;padding:4px 8px;cursor:pointer;border-radius:4px;}
+.pk-filter-popover .pkf-row:hover{background:var(--bg3);}
+.pk-filter-popover .pkf-row.pkf-selectall{border-bottom:1px solid var(--border);margin-bottom:3px;padding-bottom:7px;font-weight:600;}
+.pk-filter-popover .pkf-row label{cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.pk-filter-popover .pkf-actions{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border);}
+.pk-filter-popover .pkf-btn{flex:1;padding:6px 0;border-radius:6px;border:1px solid var(--border);
+  background:var(--bg3);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;text-align:center;}
+.pk-filter-popover .pkf-btn:hover{background:var(--bg4);}
+.pk-filter-popover .pkf-btn.pkf-apply{background:var(--mustard);color:#1a1400;border-color:var(--mustard);}
+.pk-filter-popover .pkf-empty{padding:12px 8px;color:var(--text3);font-size:11px;}
+.pickem-table .matchup-label{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;}
+.pickem-table .matchup-label .mu-team{display:flex;align-items:center;justify-content:center;height:30px;font-size:8.5px;}
+.pickem-table .matchup-label .mu-vs{color:var(--text3);font-weight:400;text-transform:lowercase;font-size:8px;letter-spacing:0;}
+.pickem-table .matchup-label .arrow{margin-left:0;margin-top:1px;}
 .pickem-table tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);}
+.pickem-table tbody tr:nth-child(even){background:#2a2a2a;}
 .pickem-table tbody tr:hover{background:var(--bg3);}
-.pickem-table td{padding:9px 14px;white-space:nowrap;}
-.pickem-table td.pk-rank{color:var(--text2);font-weight:700;width:30px;}
-.pickem-table td.pk-entry{color:var(--text);font-weight:600;}
-.pickem-table td.pk-pts{font-weight:700;color:var(--text);}
-.pickem-table .pk-pick-cell{display:flex;align-items:center;gap:6px;}
-.pickem-table .pk-logo{width:20px;height:20px;object-fit:contain;flex-shrink:0;border-radius:4px;}
+.pickem-table td{padding:14px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pickem-table td.pk-rank{color:var(--text2);font-weight:700;text-align:center;}
+.pickem-table td.pk-entry{color:var(--text);font-weight:600;text-align:left;}
+.pickem-table td.pk-ovr{font-weight:700;color:var(--text2);text-align:center;}
+.pickem-table td.pk-pts{font-weight:700;color:var(--text);text-align:center;}
+.pickem-table td.pk-pick-td{text-align:center;padding:9px 2px;}
+.pickem-table .pk-pick-cell{display:flex;align-items:center;justify-content:center;gap:3px;}
+.pickem-table .pk-logo-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;flex-shrink:0;}
+.pickem-table .pk-logo{width:30px;height:30px;object-fit:contain;flex-shrink:0;position:relative;z-index:2;}
 .pickem-table .pk-result{position:relative;display:inline-flex;}
 .pickem-table .pk-result-dot{
-  position:absolute;bottom:-3px;right:-4px;width:11px;height:11px;border-radius:50%;
-  display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;
-  border:1.5px solid var(--bg2);
+  position:absolute;bottom:-3px;right:-4px;width:15px;height:15px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;
+  border:2px solid var(--bg2);
 }
 .pickem-table .pk-result-dot.correct{background:var(--green);color:#0a1a14;}
 .pickem-table .pk-result-dot.wrong{background:var(--red);color:#fff;}
 .pickem-table .pk-dash{color:var(--text3);}
-.pickem-table .pk-abbr-fallback{font-size:9px;font-weight:800;color:var(--text2);background:var(--bg4);border-radius:4px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
+.pickem-table .pk-abbr-fallback{font-size:10px;font-weight:800;color:var(--text2);background:var(--bg4);border-radius:5px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;}
 
 .banner{background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--red);border-radius:var(--r-lg);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
 .banner h2{font-family:'Segoe UI Black','Segoe UI',sans-serif;font-weight:900;font-size:22px;color:#fff;}
@@ -960,19 +990,27 @@ tfoot .grp-gap{background:var(--bg3)!important;}
   <!-- PICK'EM TAB (Entry 147, 2026-09-09; standings table added Entry 299) -->
   <div id="tab-pickem" style="display:none;">
     <div class="mod">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
-        <div class="mod-label" style="margin-bottom:0;">Pick'em Standings — Week <select id="pickem-wk" class="portal-wk-select" onchange="loadPickemTable(Number(this.value))"></select></div>
-        <button id="pickem-table-refresh-btn" onclick="loadPickemTable(null, true)" title="Refresh Pick'em standings" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
-            <path d="M21 3v6h-6"/>
-          </svg>
-        </button>
+      <div class="wk-collapse">
+        <div class="wk-collapse-header open" onclick="togglePickemStandings()">
+          <div class="wk-col-title">Pick'em Standings — Week <select id="pickem-wk" class="portal-wk-select" onclick="event.stopPropagation()" onchange="loadPickemTable(Number(this.value))"></select></div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button id="pickem-table-refresh-btn" onclick="event.stopPropagation(); loadPickemTable(null, true)" title="Refresh Pick'em standings" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+                <path d="M21 3v6h-6"/>
+              </svg>
+            </button>
+            <div class="wk-chevron open">▼</div>
+          </div>
+        </div>
+        <div class="wk-collapse-body open" id="pickem-standings-body">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">ESPN NFL Pick'em group — every column is independently sortable, click any header to sort by it (click again to reverse). Green check = correct pick, red X = incorrect, blank = not yet played.</div>
+          <div id="pickem-table-status" style="font-size:12px;color:var(--text3);padding:20px 0;">Loading…</div>
+          <div id="pickem-table-wrap" class="pickem-table-wrap" style="display:none;"></div>
+        </div>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">ESPN NFL Pick'em group — every column is independently sortable, click any header to sort by it (click again to reverse). Green check = correct pick, red X = incorrect, blank = not yet played.</div>
-      <div id="pickem-table-status" style="font-size:12px;color:var(--text3);padding:20px 0;">Loading…</div>
-      <div id="pickem-table-wrap" class="pickem-table-wrap" style="display:none;"></div>
     </div>
+    <div id="pickem-filter-popover" class="pk-filter-popover"></div>
     <div class="mod">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
         <div class="mod-label" style="margin-bottom:0;">Pick'em Rank by Week</div>
@@ -6039,6 +6077,28 @@ function toggleTdCard(week) {
   }
 }
 
+// Pick'em Standings collapse toggle (Entry 300) — reuses the same
+// .wk-collapse/.wk-collapse-header/.wk-collapse-body/.wk-chevron pattern
+// as the TD card and Weekly Movement's week cards, so it looks and behaves
+// consistently with the rest of the app. Default-open (the "open" classes
+// are already in the markup); clicking the week-select or refresh button
+// stops propagation so those don't also toggle the collapse.
+function togglePickemStandings() {
+  const body = document.getElementById('pickem-standings-body');
+  const header = body.previousElementSibling;
+  const chevron = header.querySelector('.wk-chevron');
+  const isOpen = body.classList.contains('open');
+  if (isOpen) {
+    body.classList.remove('open');
+    header.classList.remove('open');
+    chevron.classList.remove('open');
+  } else {
+    body.classList.add('open');
+    header.classList.add('open');
+    chevron.classList.add('open');
+  }
+}
+
 // ── PICK'EM (Entry 147, 2026-09-09) ─────────────────────────────────────
 // A SEPARATE ESPN product from the fantasy football API used everywhere
 // else in this Tracker — lives on gambit-api.fantasy.espn.com, a
@@ -6066,6 +6126,141 @@ let PICKEM_DATA = null; // [{name, weeklyWins: [w1, w2, ...]}, ...] once loaded
 let PICKEM_TABLE_LOADED = false;
 let PICKEM_TABLE_DATA = null;   // { week, matchups:[{propositionId,name,status}], rows:[{name,rank,pts,overallScore,picks:[{team,result}|null,...]}] }
 let PICKEM_TABLE_SORT = { col: 'rank', dir: 'asc' };
+
+// Excel-style column filters for Entry/OVR/Pts (Hanh's explicit ask,
+// 2026-09-27). Each value is either null (no filter — show everything) or a
+// Set of the exact values to keep. A single shared popover element
+// (#pickem-filter-popover) is repositioned/repopulated per column rather
+// than building one per header, since it needs to escape the table
+// wrapper's overflow clipping (position:fixed) and survives across
+// renderPickemTable()'s full innerHTML rebuild of the table itself.
+let PICKEM_FILTERS = { entry: null, ovr: null, pts: null };
+let PICKEM_FILTER_EDIT_COL = null;
+let PICKEM_FILTER_OUTSIDE_HANDLER = null;
+
+function pickemRowValueForFilterCol(row, col) {
+  if (col === 'entry') return row.name;
+  if (col === 'ovr') return row.ovr;
+  if (col === 'pts') return row.pts;
+  return null;
+}
+
+function pickemPassesFilters(row) {
+  for (const col of ['entry', 'ovr', 'pts']) {
+    const filterSet = PICKEM_FILTERS[col];
+    if (filterSet && !filterSet.has(pickemRowValueForFilterCol(row, col))) return false;
+  }
+  return true;
+}
+
+function pickemFilterIconHtml(col) {
+  const active = PICKEM_FILTERS[col] ? 'active' : '';
+  return `<span class="pk-filter-icon ${active}" title="Filter" onclick="event.stopPropagation(); pickemOpenFilterPopover('${col}', this);">▾</span>`;
+}
+
+// Unique values always come from the FULL unfiltered row set (not the
+// currently-filtered rows), so a column's dropdown always offers every
+// possible value even while other columns are actively filtering rows out
+// — same as Excel showing all values for a column regardless of other
+// active filters.
+function pickemUniqueFilterValues(col) {
+  const data = PICKEM_TABLE_DATA;
+  if (!data) return [];
+  const seen = new Set();
+  data.rows.forEach(row => seen.add(pickemRowValueForFilterCol(row, col)));
+  const values = [...seen];
+  if (col === 'entry') values.sort((a, b) => String(a).localeCompare(String(b)));
+  else values.sort((a, b) => b - a); // OVR/Pts: highest first
+  return values;
+}
+
+function pickemOpenFilterPopover(col, iconEl) {
+  const pop = document.getElementById('pickem-filter-popover');
+  if (PICKEM_FILTER_EDIT_COL === col && pop.style.display === 'block') {
+    pickemCloseFilterPopover();
+    return;
+  }
+  PICKEM_FILTER_EDIT_COL = col;
+  const values = pickemUniqueFilterValues(col);
+  const currentSet = PICKEM_FILTERS[col]; // null = everything currently checked
+  const allChecked = !currentSet;
+
+  const rowsHtml = values.map(v => {
+    const checked = allChecked || currentSet.has(v);
+    const vAttr = String(v).replace(/"/g, '&quot;');
+    return `<div class="pkf-row"><input type="checkbox" class="pkf-val" value="${vAttr}" ${checked ? 'checked' : ''} id="pkf-val-${vAttr}">` +
+      `<label for="pkf-val-${vAttr}">${v}</label></div>`;
+  }).join('');
+
+  const showSearch = col === 'entry';
+  pop.innerHTML =
+    (showSearch ? `<input type="text" class="pkf-search" placeholder="Search…" oninput="pickemFilterSearchInput(this)">` : '') +
+    `<div class="pkf-row pkf-selectall"><input type="checkbox" id="pkf-selectall" ${allChecked ? 'checked' : ''} onchange="pickemFilterToggleAll(this)"><label for="pkf-selectall">(Select All)</label></div>` +
+    `<div class="pkf-list">${rowsHtml || '<div class="pkf-empty">No values</div>'}</div>` +
+    `<div class="pkf-actions"><span class="pkf-btn" onclick="pickemClearFilterPopover('${col}')">Clear</span><span class="pkf-btn pkf-apply" onclick="pickemApplyFilterPopover('${col}')">Apply</span></div>`;
+
+  // Position under the clicked funnel icon, clamped so it never runs off
+  // the right edge of the viewport.
+  const r = iconEl.getBoundingClientRect();
+  pop.style.display = 'block';
+  const popW = pop.offsetWidth || 200;
+  let left = r.left;
+  if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+  pop.style.left = Math.max(8, left) + 'px';
+  pop.style.top = (r.bottom + 4) + 'px';
+
+  // Close on an outside click; deferred so the click that opened this
+  // popover doesn't immediately close it via the same event bubbling up.
+  if (PICKEM_FILTER_OUTSIDE_HANDLER) document.removeEventListener('mousedown', PICKEM_FILTER_OUTSIDE_HANDLER);
+  PICKEM_FILTER_OUTSIDE_HANDLER = (e) => {
+    if (!pop.contains(e.target)) pickemCloseFilterPopover();
+  };
+  setTimeout(() => document.addEventListener('mousedown', PICKEM_FILTER_OUTSIDE_HANDLER), 0);
+}
+
+function pickemCloseFilterPopover() {
+  const pop = document.getElementById('pickem-filter-popover');
+  pop.style.display = 'none';
+  pop.innerHTML = '';
+  PICKEM_FILTER_EDIT_COL = null;
+  if (PICKEM_FILTER_OUTSIDE_HANDLER) {
+    document.removeEventListener('mousedown', PICKEM_FILTER_OUTSIDE_HANDLER);
+    PICKEM_FILTER_OUTSIDE_HANDLER = null;
+  }
+}
+
+function pickemFilterToggleAll(cb) {
+  document.querySelectorAll('#pickem-filter-popover .pkf-val').forEach(el => {
+    if (el.closest('.pkf-row').style.display !== 'none') el.checked = cb.checked;
+  });
+}
+
+function pickemFilterSearchInput(input) {
+  const q = input.value.trim().toLowerCase();
+  document.querySelectorAll('#pickem-filter-popover .pkf-list .pkf-row').forEach(row => {
+    const label = row.querySelector('label').textContent.toLowerCase();
+    row.style.display = label.includes(q) ? '' : 'none';
+  });
+}
+
+function pickemApplyFilterPopover(col) {
+  const checkboxes = [...document.querySelectorAll('#pickem-filter-popover .pkf-val')];
+  const checked = checkboxes.filter(cb => cb.checked);
+  if (checked.length === checkboxes.length) {
+    PICKEM_FILTERS[col] = null; // everything selected == no filter
+  } else {
+    const isNumeric = col === 'ovr' || col === 'pts';
+    PICKEM_FILTERS[col] = new Set(checked.map(cb => isNumeric ? Number(cb.value) : cb.value));
+  }
+  pickemCloseFilterPopover();
+  renderPickemTable();
+}
+
+function pickemClearFilterPopover(col) {
+  PICKEM_FILTERS[col] = null;
+  pickemCloseFilterPopover();
+  renderPickemTable();
+}
 
 function initPickemTable() {
   PICKEM_TABLE_LOADED = true;
@@ -6126,6 +6321,19 @@ function pickemLogoUrl(abbrev) {
   return `https://a.espncdn.com/i/teamlogos/nfl/500/${String(abbrev).toLowerCase()}.png`;
 }
 
+// Renders the logo markup shared by pick-cells and matchup headers, wrapped
+// in .pk-logo-wrap so both spots share one positioning context (tried a
+// masked white/gray "sticker" backing behind the logo here, 2026-09-27, but
+// Hanh asked to drop the background entirely — plain logo, no treatment).
+// onerror on the img replaces the whole wrapper with the plain-text/abbr
+// fallback.
+function pickemLogoStickerHtml(abbrev, errorReplacementHtml) {
+  const url = pickemLogoUrl(abbrev);
+  return `<span class="pk-logo-wrap">` +
+    `<img class="pk-logo" src="${url}" alt="${abbrev}" onerror="this.parentElement.outerHTML='${errorReplacementHtml}'">` +
+    `</span>`;
+}
+
 function pickemPickCellHtml(pick) {
   if (!pick || !pick.team) return '<span class="pk-dash">—</span>';
   const { team, result } = pick;
@@ -6133,8 +6341,7 @@ function pickemPickCellHtml(pick) {
   const dotSymbol = result === 'CORRECT' ? '✓' : (result === 'INCORRECT' ? '✕' : '');
   const dotHtml = dotClass ? `<span class="pk-result-dot ${dotClass}">${dotSymbol}</span>` : '';
   return `<span class="pk-pick-cell"><span class="pk-result">` +
-    `<img class="pk-logo" src="${pickemLogoUrl(team)}" alt="${team}" ` +
-    `onerror="this.outerHTML='&lt;span class=&quot;pk-abbr-fallback&quot;&gt;${team}&lt;/span&gt;'">` +
+    pickemLogoStickerHtml(team, `&lt;span class=&quot;pk-abbr-fallback&quot;&gt;${team}&lt;/span&gt;`) +
     `${dotHtml}</span></span>`;
 }
 
@@ -6143,9 +6350,11 @@ function sortPickemTable(col) {
   if (PICKEM_TABLE_SORT.col === col) {
     PICKEM_TABLE_SORT.dir = PICKEM_TABLE_SORT.dir === 'asc' ? 'desc' : 'asc';
   } else {
-    // Sensible default per column: rank/entry ascending; points and any
-    // matchup column descending-first (best/most-decided picks on top)
-    PICKEM_TABLE_SORT = { col, dir: (col === 'rank' || col === 'entry') ? 'asc' : 'desc' };
+    // Sensible default per column: rank/entry/matchup ascending (a matchup
+    // column groups by which team was picked — alphabetical is as good a
+    // default as any two-way toggle; click again to flip which team lands
+    // on top); Pts is the one column where "best on top" means descending.
+    PICKEM_TABLE_SORT = { col, dir: (col === 'pts' || col === 'ovr') ? 'desc' : 'asc' };
   }
   renderPickemTable();
 }
@@ -6153,13 +6362,19 @@ function sortPickemTable(col) {
 function pickemSortValue(row, col) {
   if (col === 'rank') return row.rank;
   if (col === 'entry') return row.name.toLowerCase();
+  if (col === 'ovr') return row.ovr;
   if (col === 'pts') return row.pts;
-  // a matchup column — CORRECT sorts above INCORRECT above UNDECIDED/blank
+  // A matchup column groups entries by WHICH TEAM they picked (not by
+  // correct/incorrect — that was the original bug: clicking a matchup
+  // header sorted by result, so it never actually clustered everyone who
+  // picked the same team together). Returns the team abbrev as the sort
+  // key so every "HOU" pick sorts adjacent to every other "HOU" pick;
+  // null (no pick made) is handled separately below, always sinking to
+  // the bottom regardless of direction rather than sorting alphabetically
+  // as if it were a real value.
   const idx = Number(col.split(':')[1]);
   const pick = row.picks[idx];
-  if (!pick || !pick.team) return -1;
-  const order = { CORRECT: 2, INCORRECT: 0, UNDECIDED: 1 };
-  return order[pick.result] != null ? order[pick.result] : 1;
+  return (pick && pick.team) ? pick.team : null;
 }
 
 function renderPickemTable() {
@@ -6168,40 +6383,73 @@ function renderPickemTable() {
   if (!data) return;
   const { col, dir } = PICKEM_TABLE_SORT;
 
+  const isMatchupCol = col.indexOf('matchup:') === 0;
   const rows = data.rows.slice().sort((a, b) => {
     const va = pickemSortValue(a, col), vb = pickemSortValue(b, col);
+    if (isMatchupCol) {
+      // On a matchup column, a null value means no pick was made for that
+      // game — always sink those to the bottom regardless of sort
+      // direction, rather than letting null sort alphabetically first/last
+      // by accident.
+      if (va == null && vb == null) {
+        if (a.pts !== b.pts) return b.pts - a.pts;
+        return a.name.localeCompare(b.name);
+      }
+      if (va == null) return 1;
+      if (vb == null) return -1;
+      // Different teams picked — group by team first (Hanh's explicit ask,
+      // 2026-09-27: within a team group, highest Pts on top, then A-Z —
+      // NOT plain alphabetical-only as this used to be).
+      if (va !== vb) return dir === 'asc' ? (va < vb ? -1 : 1) : (va < vb ? 1 : -1);
+      if (a.pts !== b.pts) return b.pts - a.pts;
+      return a.name.localeCompare(b.name);
+    }
     if (va < vb) return dir === 'asc' ? -1 : 1;
     if (va > vb) return dir === 'asc' ? 1 : -1;
     return a.name.localeCompare(b.name);
-  });
+  }).filter(pickemPassesFilters);
 
   const arrow = (colId) => col === colId ? (dir === 'asc' ? '▲' : '▼') : '▲';
   const sortedClass = (colId) => col === colId ? 'sorted' : '';
 
   let headHtml = `<th class="${sortedClass('rank')}" onclick="sortPickemTable('rank')">Rank <span class="arrow">${arrow('rank')}</span></th>`;
-  headHtml += `<th class="${sortedClass('entry')}" onclick="sortPickemTable('entry')">Entry <span class="arrow">${arrow('entry')}</span></th>`;
-  headHtml += `<th class="${sortedClass('pts')}" onclick="sortPickemTable('pts')">Pts <span class="arrow">${arrow('pts')}</span></th>`;
+  headHtml += `<th class="${sortedClass('entry')}" onclick="sortPickemTable('entry')">Entry <span class="arrow">${arrow('entry')}</span>${pickemFilterIconHtml('entry')}</th>`;
+  headHtml += `<th style="text-align:center;" class="${sortedClass('ovr')}" onclick="sortPickemTable('ovr')">OVR <span class="arrow">${arrow('ovr')}</span>${pickemFilterIconHtml('ovr')}</th>`;
+  headHtml += `<th style="text-align:center;" class="${sortedClass('pts')}" onclick="sortPickemTable('pts')">Pts <span class="arrow">${arrow('pts')}</span>${pickemFilterIconHtml('pts')}</th>`;
   data.matchups.forEach((m, i) => {
     const colId = 'matchup:' + i;
     const parts = String(m.name).split(' @ ');
     const away = parts[0] || '', home = parts[1] || '';
-    headHtml += `<th class="${sortedClass(colId)}" onclick="sortPickemTable('${colId}')">` +
+    headHtml += `<th class="matchup-th ${sortedClass(colId)}" onclick="sortPickemTable('${colId}')">` +
       `<div class="matchup-label">` +
-      (away ? `<img src="${pickemLogoUrl(away)}" alt="${away}" onerror="this.outerHTML='${away}'">` : '') +
-      `<span class="at">@</span>` +
-      (home ? `<img src="${pickemLogoUrl(home)}" alt="${home}" onerror="this.outerHTML='${home}'">` : '') +
-      ` <span class="arrow">${arrow(colId)}</span></div></th>`;
+      `<span class="mu-team">${away ? pickemLogoStickerHtml(away, away) : ''}</span>` +
+      `<span class="mu-vs">vs</span>` +
+      `<span class="mu-team">${home ? pickemLogoStickerHtml(home, home) : ''}</span>` +
+      `<span class="arrow">${arrow(colId)}</span></div></th>`;
   });
 
-  const bodyHtml = rows.map(row => {
+  const bodyHtml = rows.length ? rows.map(row => {
     let cells = `<td class="pk-rank">${row.rank}</td>`;
-    cells += `<td class="pk-entry">${row.name}</td>`;
+    cells += `<td class="pk-entry" title="${row.name}">${row.name}</td>`;
+    cells += `<td class="pk-ovr">${row.ovr}</td>`;
     cells += `<td class="pk-pts">${row.pts}</td>`;
-    row.picks.forEach(pick => { cells += `<td>${pickemPickCellHtml(pick)}</td>`; });
+    row.picks.forEach(pick => { cells += `<td class="pk-pick-td">${pickemPickCellHtml(pick)}</td>`; });
     return `<tr>${cells}</tr>`;
-  }).join('');
+  }).join('') : `<tr><td colspan="${4 + data.matchups.length}" style="text-align:center;color:var(--text3);padding:20px 0;">No entries match the current filter.</td></tr>`;
 
-  wrap.innerHTML = `<table class="pickem-table"><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+  // table-layout:fixed so all matchup columns divide the remaining width
+  // evenly and the whole table fits the container without a horizontal
+  // scrollbar, however many games are in a week (up to 16) — Hanh's
+  // explicit ask (2026-09-27). Rank/Entry/OVR/Pts get fixed percentages
+  // that work for 2-digit ranks and typical entry names; matchup columns
+  // split whatever's left equally.
+  const n = data.matchups.length || 1;
+  const rankPct = 5, entryPct = 16, ovrPct = 6, ptsPct = 6;
+  const matchupPct = (100 - rankPct - entryPct - ovrPct - ptsPct) / n;
+  let colgroupHtml = `<col style="width:${rankPct}%"><col style="width:${entryPct}%"><col style="width:${ovrPct}%"><col style="width:${ptsPct}%">`;
+  for (let i = 0; i < n; i++) colgroupHtml += `<col style="width:${matchupPct}%">`;
+
+  wrap.innerHTML = `<table class="pickem-table"><colgroup>${colgroupHtml}</colgroup><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
 }
 
 // Distinct-hue color generator for however many entries exist (30 here) —
@@ -6324,11 +6572,11 @@ function renderPickemBump() {
   rankTicks.forEach(t => {
     const y = yScale(t);
     axis += `<line x1="${AXIS_X}" x2="${W - padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,${t===1?0.14:0.06})" stroke-width="1"/>`;
-    axis += `<text x="${AXIS_X - 6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="9" fill="#777" font-family="Segoe UI,sans-serif">${t}</text>`;
+    axis += `<text x="${AXIS_X - 6}" y="${(y+3).toFixed(1)}" text-anchor="end" font-size="11" fill="#777" font-family="Segoe UI,sans-serif">${t}</text>`;
   });
   for (let w = 1; w <= SEASON_WKS; w++) {
     const played = w <= weeksToShow;
-    axis += `<text x="${xScale(w).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="9" font-weight="700" fill="${played?'#777':'#333'}" font-family="Segoe UI,sans-serif">${w}</text>`;
+    axis += `<text x="${xScale(w).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="${played?'#777':'#333'}" font-family="Segoe UI,sans-serif">${w}</text>`;
   }
 
   let lines = '', dots = '';
@@ -6368,9 +6616,9 @@ function renderPickemBump() {
   let labels = '';
   lbls.forEach((L, gi) => {
     if (L.members.length === 1) {
-      labels += `<text x="${lblX}" y="${L.y+3}" font-size="9" font-weight="600" fill="${L.members[0].color}" font-family="Segoe UI,sans-serif">${L.members[0].name} <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
+      labels += `<text x="${lblX}" y="${L.y+3}" font-size="11" font-weight="600" fill="${L.members[0].color}" font-family="Segoe UI,sans-serif">${L.members[0].name} <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
     } else {
-      labels += `<text class="pickem-tie-lbl" data-idx="${gi}" x="${lblX}" y="${L.y+3}" font-size="9" font-weight="600" fill="#ccc" font-family="Segoe UI,sans-serif" style="cursor:default;">${L.members.length} players <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
+      labels += `<text class="pickem-tie-lbl" data-idx="${gi}" x="${lblX}" y="${L.y+3}" font-size="11" font-weight="600" fill="#ccc" font-family="Segoe UI,sans-serif" style="cursor:default;">${L.members.length} players <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
     }
   });
 
