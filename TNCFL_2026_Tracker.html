@@ -91,6 +91,40 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .mod-label{font-size:10px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text3);margin-bottom:8px;}
 .mod-label span{color:var(--red);}
 
+/* Pick'em standings table (Entry 299) */
+.pickem-table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);overflow-x:auto;}
+.pickem-table{border-collapse:collapse;width:100%;font-size:12.5px;}
+.pickem-table thead th{
+  text-align:left;padding:10px 14px;font-size:10.5px;font-weight:700;letter-spacing:0.05em;
+  text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);
+  white-space:nowrap;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--bg2);
+}
+.pickem-table thead th:hover{color:var(--text2);}
+.pickem-table thead th.sorted{color:var(--mustard);}
+.pickem-table thead th .arrow{margin-left:4px;font-size:9px;opacity:0.35;}
+.pickem-table thead th.sorted .arrow{opacity:1;}
+.pickem-table .matchup-label{display:flex;align-items:center;gap:4px;}
+.pickem-table .matchup-label img{width:14px;height:14px;object-fit:contain;}
+.pickem-table .matchup-label .at{color:var(--text3);font-weight:400;text-transform:none;font-size:9px;}
+.pickem-table tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);}
+.pickem-table tbody tr:hover{background:var(--bg3);}
+.pickem-table td{padding:9px 14px;white-space:nowrap;}
+.pickem-table td.pk-rank{color:var(--text2);font-weight:700;width:30px;}
+.pickem-table td.pk-entry{color:var(--text);font-weight:600;}
+.pickem-table td.pk-pts{font-weight:700;color:var(--text);}
+.pickem-table .pk-pick-cell{display:flex;align-items:center;gap:6px;}
+.pickem-table .pk-logo{width:20px;height:20px;object-fit:contain;flex-shrink:0;border-radius:4px;}
+.pickem-table .pk-result{position:relative;display:inline-flex;}
+.pickem-table .pk-result-dot{
+  position:absolute;bottom:-3px;right:-4px;width:11px;height:11px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;
+  border:1.5px solid var(--bg2);
+}
+.pickem-table .pk-result-dot.correct{background:var(--green);color:#0a1a14;}
+.pickem-table .pk-result-dot.wrong{background:var(--red);color:#fff;}
+.pickem-table .pk-dash{color:var(--text3);}
+.pickem-table .pk-abbr-fallback{font-size:9px;font-weight:800;color:var(--text2);background:var(--bg4);border-radius:4px;width:20px;height:20px;display:flex;align-items:center;justify-content:center;}
+
 .banner{background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--red);border-radius:var(--r-lg);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
 .banner h2{font-family:'Segoe UI Black','Segoe UI',sans-serif;font-weight:900;font-size:22px;color:#fff;}
 .banner h2 .r{color:var(--red);}
@@ -923,8 +957,22 @@ tfoot .grp-gap{background:var(--bg3)!important;}
     </div>
   </div>
 
-  <!-- PICK'EM TAB (Entry 147, 2026-09-09) -->
+  <!-- PICK'EM TAB (Entry 147, 2026-09-09; standings table added Entry 299) -->
   <div id="tab-pickem" style="display:none;">
+    <div class="mod">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+        <div class="mod-label" style="margin-bottom:0;">Pick'em Standings — Week <select id="pickem-wk" class="portal-wk-select" onchange="loadPickemTable(Number(this.value))"></select></div>
+        <button id="pickem-table-refresh-btn" onclick="loadPickemTable(null, true)" title="Refresh Pick'em standings" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+            <path d="M21 3v6h-6"/>
+          </svg>
+        </button>
+      </div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">ESPN NFL Pick'em group — every column is independently sortable, click any header to sort by it (click again to reverse). Green check = correct pick, red X = incorrect, blank = not yet played.</div>
+      <div id="pickem-table-status" style="font-size:12px;color:var(--text3);padding:20px 0;">Loading…</div>
+      <div id="pickem-table-wrap" class="pickem-table-wrap" style="display:none;"></div>
+    </div>
     <div class="mod">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
         <div class="mod-label" style="margin-bottom:0;">Pick'em Rank by Week</div>
@@ -2078,6 +2126,7 @@ function showTab(id) {
   if(id==='playoffs') renderPlayoffs();
   if(id==='draft')    renderDraft();
   if(id==='pickem' && !PICKEM_LOADED) loadPickemData();
+  if(id==='pickem' && !PICKEM_TABLE_LOADED) initPickemTable();
   // Money Circle banner (#money-circle-card) is a GLOBAL element sitting
   // outside all tab-specific divs, so it normally shows on every tab. Hide
   // it specifically on Pick'em (Entry 149 corrects Entry 148, which
@@ -3711,6 +3760,17 @@ function renderMovTable(elId, w, table, data, sessionNames) {
   }).join('');
 
   const el = document.getElementById(elId);
+  // Entry 298 durable guard: this exact call crashed live in production
+  // ("Cannot set properties of null") when refreshLiveMovementSnapshot()
+  // was called before renderMovement() had created this element. That
+  // specific ordering bug is fixed, but a null guard here costs nothing
+  // and means ANY future call-order mistake (this function is called from
+  // several places) degrades to a logged warning instead of an uncaught
+  // exception that could interrupt whatever else was running in the same
+  // call stack. If you see this warning in the console, something is
+  // calling renderMovTable()/renderWkCard() before renderMovement() has
+  // run for this page load — find and fix the caller's ordering.
+  if (!el) { console.warn('[Weekly Movement] renderMovTable: #' + elId + ' not in DOM yet — skipping this render.'); return; }
   el.innerHTML = `
     <table>
       <thead><tr><th class="tl sortable" data-k="mgr">Name<span class="si">${arrow('mgr')}</span></th>${headCells}</tr></thead>
@@ -5994,6 +6054,155 @@ const PICKEM_GROUP_ID = '205533cc-4c78-4c91-a0a3-a828976f5c6b';
 const PICKEM_URL = `https://gambit-api.fantasy.espn.com/apis/v1/challenges/${PICKEM_CHALLENGE}/groups/${PICKEM_GROUP_ID}?view=chui_pagetype_group_picks`;
 let PICKEM_LOADED = false;
 let PICKEM_DATA = null; // [{name, weeklyWins: [w1, w2, ...]}, ...] once loaded
+
+// ── PICK'EM STANDINGS TABLE (Entry 299) ─────────────────────────────────
+// Replicates ESPN's own Pick'em group-standings page: Rank / Entry / Pts /
+// one sortable column per that week's matchup, each cell showing the
+// entry's picked team with a correct/incorrect badge. The picks-vs-teams
+// join (picks only carry opaque UUIDs; team names live in a separate
+// `propositions` endpoint) happens server-side in the Worker — see
+// worker.js's computePickemTable() for the full verified data-shape notes.
+// This side just fetches the already-joined table and renders/sorts it.
+let PICKEM_TABLE_LOADED = false;
+let PICKEM_TABLE_DATA = null;   // { week, matchups:[{propositionId,name,status}], rows:[{name,rank,pts,overallScore,picks:[{team,result}|null,...]}] }
+let PICKEM_TABLE_SORT = { col: 'rank', dir: 'asc' };
+
+function initPickemTable() {
+  PICKEM_TABLE_LOADED = true;
+  const sel = document.getElementById('pickem-wk');
+  sel.innerHTML = '';
+  const maxWk = LIVE_WK > 0 ? LIVE_WK : 1;
+  for (let w = 1; w <= maxWk; w++) {
+    const opt = document.createElement('option');
+    opt.value = w; opt.textContent = w;
+    if (w === maxWk) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  loadPickemTable(maxWk);
+}
+
+async function loadPickemTable(week, isManualRefresh) {
+  if (week == null) week = Number(document.getElementById('pickem-wk').value) || 1;
+  const statusEl = document.getElementById('pickem-table-status');
+  const wrapEl = document.getElementById('pickem-table-wrap');
+  const btn = document.getElementById('pickem-table-refresh-btn');
+  if (btn && isManualRefresh) btn.style.opacity = 0.3;
+  statusEl.style.display = '';
+  statusEl.textContent = 'Loading…';
+  wrapEl.style.display = 'none';
+  try {
+    const forceParam = isManualRefresh ? '?force=1' : '';
+    const resp = await fetch(`${WORKER_URL}/pickem-table/${week}${forceParam}`);
+    if (!resp.ok) throw new Error('Worker pickem-table fetch not ok (' + resp.status + ')');
+    const data = await resp.json();
+    if (!data.live) throw new Error(data.error || "Worker could not build the Pick'em table");
+    const stillWantedWeek = Number(document.getElementById('pickem-wk').value) || 1;
+    if (data.week !== stillWantedWeek) return; // a slower response landed after the user already switched weeks
+    PICKEM_TABLE_DATA = data;
+    PICKEM_TABLE_SORT = { col: 'rank', dir: 'asc' };
+    renderPickemTable();
+    statusEl.style.display = 'none';
+    wrapEl.style.display = '';
+    if (data.stale) {
+      statusEl.style.display = '';
+      statusEl.textContent = "Showing last known standings — couldn't reach ESPN just now (" + (data.staleReason || 'unknown error') + ").";
+    }
+  } catch (e) {
+    console.error('[Pickem Table] load failed:', e);
+    statusEl.style.display = '';
+    statusEl.textContent = "Couldn't load Pick'em standings — try the refresh button.";
+    wrapEl.style.display = 'none';
+  } finally {
+    if (btn) btn.style.opacity = 0.6;
+  }
+}
+
+// ESPN's team-logo CDN filenames match the same lowercase 3-letter codes
+// used elsewhere in this Tracker's PRO_TEAM_ABBR, for every case actually
+// checked against real Pick'em data so far (ATL/PHI/MIN/NYJ). Not
+// exhaustively confirmed for all 32 teams, so a mismatch degrades to a
+// plain-text abbreviation tile via onerror instead of a broken image.
+function pickemLogoUrl(abbrev) {
+  return `https://a.espncdn.com/i/teamlogos/nfl/500/${String(abbrev).toLowerCase()}.png`;
+}
+
+function pickemPickCellHtml(pick) {
+  if (!pick || !pick.team) return '<span class="pk-dash">—</span>';
+  const { team, result } = pick;
+  const dotClass = result === 'CORRECT' ? 'correct' : (result === 'INCORRECT' ? 'wrong' : '');
+  const dotSymbol = result === 'CORRECT' ? '✓' : (result === 'INCORRECT' ? '✕' : '');
+  const dotHtml = dotClass ? `<span class="pk-result-dot ${dotClass}">${dotSymbol}</span>` : '';
+  return `<span class="pk-pick-cell"><span class="pk-result">` +
+    `<img class="pk-logo" src="${pickemLogoUrl(team)}" alt="${team}" ` +
+    `onerror="this.outerHTML='&lt;span class=&quot;pk-abbr-fallback&quot;&gt;${team}&lt;/span&gt;'">` +
+    `${dotHtml}</span></span>`;
+}
+
+function sortPickemTable(col) {
+  if (!PICKEM_TABLE_DATA) return;
+  if (PICKEM_TABLE_SORT.col === col) {
+    PICKEM_TABLE_SORT.dir = PICKEM_TABLE_SORT.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    // Sensible default per column: rank/entry ascending; points and any
+    // matchup column descending-first (best/most-decided picks on top)
+    PICKEM_TABLE_SORT = { col, dir: (col === 'rank' || col === 'entry') ? 'asc' : 'desc' };
+  }
+  renderPickemTable();
+}
+
+function pickemSortValue(row, col) {
+  if (col === 'rank') return row.rank;
+  if (col === 'entry') return row.name.toLowerCase();
+  if (col === 'pts') return row.pts;
+  // a matchup column — CORRECT sorts above INCORRECT above UNDECIDED/blank
+  const idx = Number(col.split(':')[1]);
+  const pick = row.picks[idx];
+  if (!pick || !pick.team) return -1;
+  const order = { CORRECT: 2, INCORRECT: 0, UNDECIDED: 1 };
+  return order[pick.result] != null ? order[pick.result] : 1;
+}
+
+function renderPickemTable() {
+  const data = PICKEM_TABLE_DATA;
+  const wrap = document.getElementById('pickem-table-wrap');
+  if (!data) return;
+  const { col, dir } = PICKEM_TABLE_SORT;
+
+  const rows = data.rows.slice().sort((a, b) => {
+    const va = pickemSortValue(a, col), vb = pickemSortValue(b, col);
+    if (va < vb) return dir === 'asc' ? -1 : 1;
+    if (va > vb) return dir === 'asc' ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const arrow = (colId) => col === colId ? (dir === 'asc' ? '▲' : '▼') : '▲';
+  const sortedClass = (colId) => col === colId ? 'sorted' : '';
+
+  let headHtml = `<th class="${sortedClass('rank')}" onclick="sortPickemTable('rank')">Rank <span class="arrow">${arrow('rank')}</span></th>`;
+  headHtml += `<th class="${sortedClass('entry')}" onclick="sortPickemTable('entry')">Entry <span class="arrow">${arrow('entry')}</span></th>`;
+  headHtml += `<th class="${sortedClass('pts')}" onclick="sortPickemTable('pts')">Pts <span class="arrow">${arrow('pts')}</span></th>`;
+  data.matchups.forEach((m, i) => {
+    const colId = 'matchup:' + i;
+    const parts = String(m.name).split(' @ ');
+    const away = parts[0] || '', home = parts[1] || '';
+    headHtml += `<th class="${sortedClass(colId)}" onclick="sortPickemTable('${colId}')">` +
+      `<div class="matchup-label">` +
+      (away ? `<img src="${pickemLogoUrl(away)}" alt="${away}" onerror="this.outerHTML='${away}'">` : '') +
+      `<span class="at">@</span>` +
+      (home ? `<img src="${pickemLogoUrl(home)}" alt="${home}" onerror="this.outerHTML='${home}'">` : '') +
+      ` <span class="arrow">${arrow(colId)}</span></div></th>`;
+  });
+
+  const bodyHtml = rows.map(row => {
+    let cells = `<td class="pk-rank">${row.rank}</td>`;
+    cells += `<td class="pk-entry">${row.name}</td>`;
+    cells += `<td class="pk-pts">${row.pts}</td>`;
+    row.picks.forEach(pick => { cells += `<td>${pickemPickCellHtml(pick)}</td>`; });
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  wrap.innerHTML = `<table class="pickem-table"><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+}
 
 // Distinct-hue color generator for however many entries exist (30 here) —
 // the site's normal 10-manager color palette doesn't extend to a group
