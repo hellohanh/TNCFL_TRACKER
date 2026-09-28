@@ -135,12 +135,14 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pickem-table tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);}
 .pickem-table tbody tr:nth-child(even){background:#2a2a2a;} /* Entry 309: zebra striping, Hanh's ask 2026-09-27 */
 .pickem-table tbody tr:hover{background:var(--bg3);}
-.pickem-table td{padding:8px 6px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
-.pickem-table td.pk-rank{color:var(--text2);font-weight:700;text-align:center;}
+.pickem-table td{padding:8px 6px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;} /* Entry 312: reduced from 14px/14px so subtitle rows match pick-cell row height */
 .pickem-table td.pk-entry{color:var(--text);font-weight:600;text-align:left;white-space:normal;font-size:10pt;}
 .pickem-table .pk-entry-sub{color:var(--mustard);font-weight:400;font-size:9.5pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;} /* Entry 312: real-name subtitle */
 .pickem-table td.pk-ovr{font-weight:700;color:var(--text2);text-align:center;}
 .pickem-table td.pk-pts{font-weight:700;color:var(--text);text-align:center;}
+.pickem-table td.pk-tie{font-weight:700;color:var(--text2);text-align:center;} /* Entry 315: Tie Break column */
+.pickem-table th.tie-th{text-align:center;padding:8px 2px;}
+.pickem-table .tie-label{display:flex;flex-direction:column;align-items:center;justify-content:center;line-height:1.25;font-size:8.5px;}
 .pickem-table td.pk-pick-td{text-align:center;padding:9px 2px;}
 .pickem-table .pk-pick-cell{display:flex;align-items:center;justify-content:center;gap:3px;}
 /* Entry 304: logos sized 30x30 (row height/padding increased to match),
@@ -6085,8 +6087,12 @@ let PICKEM_DATA = null; // [{name, weeklyWins: [w1, w2, ...]}, ...] once loaded
 // worker.js's computePickemTable() for the full verified data-shape notes.
 // This side just fetches the already-joined table and renders/sorts it.
 let PICKEM_TABLE_LOADED = false;
-let PICKEM_TABLE_DATA = null;   // { week, matchups:[{propositionId,name,status}], rows:[{name,rank,pts,overallScore,picks:[{team,result}|null,...]}] }
-let PICKEM_TABLE_SORT = { col: 'rank', dir: 'asc' };
+let PICKEM_TABLE_DATA = null;   // { week, matchups:[{propositionId,name,status}], rows:[{name,rank,pts,tie,overallScore,picks:[{team,result}|null,...]}] }
+// Entry 315: default sort changed from 'rank' to 'pts' desc — the Rank
+// column itself was removed from the table (Hanh's explicit ask,
+// 2026-09-28), and sorting by Pts descending reproduces the same order
+// rank was derived from in the first place.
+let PICKEM_TABLE_SORT = { col: 'pts', dir: 'desc' };
 
 // Entry 310: Excel-style column filters for Entry/OVR/Pts (Hanh's explicit
 // ask, 2026-09-27). Each value is either null (no filter — show everything) or a
@@ -6255,7 +6261,7 @@ async function loadPickemTable(week, isManualRefresh) {
     const stillWantedWeek = Number(document.getElementById('pickem-wk').value) || 1;
     if (data.week !== stillWantedWeek) return; // a slower response landed after the user already switched weeks
     PICKEM_TABLE_DATA = data;
-    PICKEM_TABLE_SORT = { col: 'rank', dir: 'asc' };
+    PICKEM_TABLE_SORT = { col: 'pts', dir: 'desc' }; // Entry 315: Rank column removed
     renderPickemTable();
     statusEl.style.display = 'none';
     wrapEl.style.display = '';
@@ -6314,8 +6320,9 @@ function sortPickemTable(col) {
     // Sensible default per column: rank/entry/matchup ascending (a matchup
     // column groups by which team was picked — alphabetical is as good a
     // default as any two-way toggle; click again to flip which team lands
-    // on top); Pts is the one column where "best on top" means descending.
-    PICKEM_TABLE_SORT = { col, dir: (col === 'pts' || col === 'ovr') ? 'desc' : 'asc' };
+    // on top); Pts/OVR/Tie Break are the numeric-score columns where
+    // "highest on top" means descending (Entry 315: added 'tie' here).
+    PICKEM_TABLE_SORT = { col, dir: (col === 'pts' || col === 'ovr' || col === 'tie') ? 'desc' : 'asc' };
   }
   renderPickemTable();
 }
@@ -6325,6 +6332,10 @@ function pickemSortValue(row, col) {
   if (col === 'entry') return row.name.toLowerCase();
   if (col === 'ovr') return row.ovr;
   if (col === 'pts') return row.pts;
+  // Entry 315: Tie Break — null (no submission, shown as "—") sinks below
+  // every real value regardless of sort direction, same treatment as a
+  // missing matchup pick.
+  if (col === 'tie') return row.tie == null ? -Infinity : row.tie;
   // Entry 303: a matchup column groups entries by WHICH TEAM they picked
   // (not by correct/incorrect — that was the original bug: clicking a matchup
   // header sorted by result, so it never actually clustered everyone who
@@ -6373,8 +6384,9 @@ function renderPickemTable() {
   const arrow = (colId) => col === colId ? (dir === 'asc' ? '▲' : '▼') : '▲';
   const sortedClass = (colId) => col === colId ? 'sorted' : '';
 
-  let headHtml = `<th class="${sortedClass('rank')}" onclick="sortPickemTable('rank')">Rank <span class="arrow">${arrow('rank')}</span></th>`;
-  headHtml += `<th class="${sortedClass('entry')}" onclick="sortPickemTable('entry')">Entry <span class="arrow">${arrow('entry')}</span>${pickemFilterIconHtml('entry')}</th>`;
+  // Entry 315: Rank column removed (Hanh's explicit ask, 2026-09-28) —
+  // Entry is now the first column.
+  let headHtml = `<th class="${sortedClass('entry')}" onclick="sortPickemTable('entry')">Entry <span class="arrow">${arrow('entry')}</span>${pickemFilterIconHtml('entry')}</th>`;
   headHtml += `<th style="text-align:center;" class="${sortedClass('ovr')}" onclick="sortPickemTable('ovr')">OVR <span class="arrow">${arrow('ovr')}</span>${pickemFilterIconHtml('ovr')}</th>`;
   headHtml += `<th style="text-align:center;" class="${sortedClass('pts')}" onclick="sortPickemTable('pts')">Pts <span class="arrow">${arrow('pts')}</span>${pickemFilterIconHtml('pts')}</th>`;
   data.matchups.forEach((m, i) => {
@@ -6388,33 +6400,44 @@ function renderPickemTable() {
       `<span class="mu-team">${home ? pickemLogoStickerHtml(home, home) : ''}</span>` +
       `<span class="arrow">${arrow(colId)}</span></div></th>`;
   });
+  // Entry 315: Tie Break column appended at the end, matching ESPN's own
+  // "TIE" column on its live Groups tab (confirmed via Hanh's screenshot,
+  // 2026-09-28) — 2-line stacked "Tie"/"Break" header, same stacked-label
+  // convention as the matchup headers above.
+  headHtml += `<th class="tie-th ${sortedClass('tie')}" onclick="sortPickemTable('tie')">` +
+    `<div class="tie-label"><span>Tie</span><span>Break</span></div>` +
+    `<span class="arrow">${arrow('tie')}</span></th>`;
 
   const bodyHtml = rows.length ? rows.map(row => {
-    let cells = `<td class="pk-rank">${row.rank}</td>`;
     // Entry 312: real-name subtitle under the handle, when known (see
     // pickemResolveRealName() in worker.js for the rename-proof mechanism).
-    cells += `<td class="pk-entry" title="${row.name}">${row.name}` +
+    let cells = `<td class="pk-entry" title="${row.name}">${row.name}` +
       (row.realName ? `<div class="pk-entry-sub">${row.realName}</div>` : '') +
       `</td>`;
     cells += `<td class="pk-ovr">${row.ovr}</td>`;
     cells += `<td class="pk-pts">${row.pts}</td>`;
     row.picks.forEach(pick => { cells += `<td class="pk-pick-td">${pickemPickCellHtml(pick)}</td>`; });
+    // Entry 315: "—" for no tiebreak submission this week, matching ESPN's
+    // own "--" and this table's existing dash convention for missing picks.
+    cells += `<td class="pk-tie">${row.tie != null ? row.tie : '<span class="pk-dash">—</span>'}</td>`;
     return `<tr>${cells}</tr>`;
-  }).join('') : `<tr><td colspan="${4 + data.matchups.length}" style="text-align:center;color:var(--text3);padding:20px 0;">No entries match the current filter.</td></tr>`;
+  }).join('') : `<tr><td colspan="${3 + data.matchups.length + 1}" style="text-align:center;color:var(--text3);padding:20px 0;">No entries match the current filter.</td></tr>`;
 
   // Entry 302: 3-line "team/vs/team" stacked header layout (matchup-label/
   // mu-team/mu-vs classes) plus table-layout:fixed so all matchup columns
   // divide the remaining width evenly and the whole table fits the container
   // without a horizontal
   // scrollbar, however many games are in a week (up to 16) — Hanh's
-  // explicit ask (2026-09-27). Rank/Entry/OVR/Pts get fixed percentages
-  // that work for 2-digit ranks and typical entry names; matchup columns
-  // split whatever's left equally.
+  // explicit ask (2026-09-27). Entry/OVR/Pts/Tie Break get fixed percentages
+  // that work for typical entry names and 2-3 digit scores; matchup columns
+  // split whatever's left equally. Entry 315: Rank column dropped (freed
+  // 5%, folded into Entry) and Tie Break added at the end.
   const n = data.matchups.length || 1;
-  const rankPct = 5, entryPct = 16, ovrPct = 6, ptsPct = 6;
-  const matchupPct = (100 - rankPct - entryPct - ovrPct - ptsPct) / n;
-  let colgroupHtml = `<col style="width:${rankPct}%"><col style="width:${entryPct}%"><col style="width:${ovrPct}%"><col style="width:${ptsPct}%">`;
+  const entryPct = 18, ovrPct = 6, ptsPct = 6, tiePct = 7;
+  const matchupPct = (100 - entryPct - ovrPct - ptsPct - tiePct) / n;
+  let colgroupHtml = `<col style="width:${entryPct}%"><col style="width:${ovrPct}%"><col style="width:${ptsPct}%">`;
   for (let i = 0; i < n; i++) colgroupHtml += `<col style="width:${matchupPct}%">`;
+  colgroupHtml += `<col style="width:${tiePct}%">`;
 
   wrap.innerHTML = `<table class="pickem-table"><colgroup>${colgroupHtml}</colgroup><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
 }
