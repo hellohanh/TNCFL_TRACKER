@@ -133,7 +133,7 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pickem-table .matchup-label .mu-vs{color:var(--text3);font-weight:400;text-transform:lowercase;font-size:8px;letter-spacing:0;}
 .pickem-table .matchup-label .arrow{margin-left:0;margin-top:1px;}
 .pickem-table tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);}
-.pickem-table tbody tr:nth-child(even){background:#2a2a2a;}
+.pickem-table tbody tr:nth-child(even){background:#2a2a2a;} /* Entry 309: zebra striping, Hanh's ask 2026-09-27 */
 .pickem-table tbody tr:hover{background:var(--bg3);}
 .pickem-table td{padding:14px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pickem-table td.pk-rank{color:var(--text2);font-weight:700;text-align:center;}
@@ -142,6 +142,8 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pickem-table td.pk-pts{font-weight:700;color:var(--text);text-align:center;}
 .pickem-table td.pk-pick-td{text-align:center;padding:9px 2px;}
 .pickem-table .pk-pick-cell{display:flex;align-items:center;justify-content:center;gap:3px;}
+/* Entry 304: logos sized 30x30 (row height/padding increased to match),
+   Entry as left-justified text column — Hanh's explicit ask, 2026-09-27. */
 .pickem-table .pk-logo-wrap{position:relative;display:inline-flex;align-items:center;justify-content:center;width:30px;height:30px;flex-shrink:0;}
 .pickem-table .pk-logo{width:30px;height:30px;object-fit:contain;flex-shrink:0;position:relative;z-index:2;}
 .pickem-table .pk-result{position:relative;display:inline-flex;}
@@ -3056,12 +3058,10 @@ function renderDespair2() {
   for(let w=0;w<N;w++){ const played=w<LIVE_WK; out+=`<text x="${xOf(w)}" y="${H-8}" text-anchor="middle" font-size="9" font-weight="700" fill="${played?'#777':'#333'}" font-family="Segoe UI,sans-serif">${w+1}</text>`; }
 
   out+='<g clip-path="url(#despair-clip2)">';
-  // Top 4 by cumulative points — 2nd through 4th get gap-closure trendlines
-  const top4Ranked = [...MANAGERS].map((m,mi)=>({mi, cum:CUM_TOTALS[mi][LIVE_WK-1]}))
-    .sort((a,b)=>b.cum-a.cum).slice(0,4);
-  const leaderMi = top4Ranked[0].mi;
-  const top4Set = new Set(top4Ranked.map(x=>x.mi));
-
+  // Entry 311: gap-closure projection trendlines (dashed lines projecting
+  // 2nd-4th place closing the gap to 1st) removed entirely per Hanh's
+  // explicit ask, 2026-09-27 — only the actual solid gap-behind lines and
+  // dots remain.
   MANAGERS.forEach((m,mi)=>{
     const gaps=gapBehind[mi];
     let d=''; let started=false;
@@ -3071,52 +3071,12 @@ function renderDespair2() {
       else { d+='L '+xOf(w)+' '+yOf(g)+' '; }
     });
     if(d) out+=`<path d="${d}" fill="none" stroke="${m.color}" stroke-width="2" opacity="${spotOpacity(m.name,0.85)}" stroke-linejoin="round" stroke-linecap="round"/>`;
-    // Cubic trendline for top 4 managers (money circle equivalent)
 
     gaps.forEach((g,w)=>{
       if(g===null) return;
       out+=`<circle cx="${xOf(w)}" cy="${yOf(g)}" r="2.8" fill="${m.color}" opacity="${spotOpacity(m.name,1)}"
         class="dd-dot" data-name="${m.name}" data-wk="${w+1}" data-gap="${g.toFixed(2)}" data-col="${m.color}" style="cursor:pointer;"/>`;
     });
-
-    // Gap-closure trendline for 2nd-4th place only
-    if(top4Set.has(mi) && mi !== leaderMi && LIVE_WK >= 3){
-      const playedGaps = gaps.slice(0, LIVE_WK).filter(g => g !== null);
-
-      // Compute week-over-week deltas (how much gap changed each week)
-      // Negative delta = closing gap, positive = falling further behind
-      const deltas = [];
-      for(let i=1; i<playedGaps.length; i++) deltas.push(playedGaps[i] - playedGaps[i-1]);
-
-      // Weighted linear trend on deltas: recent weeks weighted more heavily
-      // w_k = e^(0.6 * k) so last week ~4x more than first delta
-      const nd = deltas.length;
-      let sw=0, swx=0, swy=0, swxx=0, swxy=0;
-      deltas.forEach((d,k)=>{
-        const w = Math.exp(0.6 * k);
-        sw+=w; swx+=w*k; swy+=w*d; swxx+=w*k*k; swxy+=w*k*d;
-      });
-      const denom = sw*swxx - swx*swx;
-      const slope  = Math.abs(denom) < 1e-10 ? 0 : (sw*swxy - swx*swy) / denom;
-      const intercept = (swy - slope*swx) / sw;
-
-      // Project: starting from last known gap, accumulate projected deltas
-      const lastGap = playedGaps[playedGaps.length - 1];
-      const lastDeltaIdx = nd - 1;
-
-      let td = ''; let proj = lastGap;
-      // Start trendline at last played week
-      td += 'M ' + xOf(LIVE_WK-1) + ' ' + yOf(Math.max(0, proj)) + ' ';
-      for(let w=LIVE_WK; w<N; w++){
-        const deltaIdx = lastDeltaIdx + (w - LIVE_WK + 1);
-        const projDelta = intercept + slope * deltaIdx;
-        proj += projDelta;
-        const y = yOf(Math.max(0, proj));
-        td += 'L ' + xOf(w) + ' ' + y + ' ';
-        if(proj <= 0) break; // reached 1st place — stop trendline
-      }
-      if(td) out+=`<path d="${td}" fill="none" stroke="${m.color}" stroke-width="1.6" opacity="0.75" stroke-dasharray="5 4"/>`;
-    }
   });
 
   // Entry 178 (2026-09-10): removed the Entry 168 "+" tie marker again per
@@ -6127,8 +6087,8 @@ let PICKEM_TABLE_LOADED = false;
 let PICKEM_TABLE_DATA = null;   // { week, matchups:[{propositionId,name,status}], rows:[{name,rank,pts,overallScore,picks:[{team,result}|null,...]}] }
 let PICKEM_TABLE_SORT = { col: 'rank', dir: 'asc' };
 
-// Excel-style column filters for Entry/OVR/Pts (Hanh's explicit ask,
-// 2026-09-27). Each value is either null (no filter — show everything) or a
+// Entry 310: Excel-style column filters for Entry/OVR/Pts (Hanh's explicit
+// ask, 2026-09-27). Each value is either null (no filter — show everything) or a
 // Set of the exact values to keep. A single shared popover element
 // (#pickem-filter-popover) is repositioned/repopulated per column rather
 // than building one per header, since it needs to escape the table
@@ -6364,8 +6324,8 @@ function pickemSortValue(row, col) {
   if (col === 'entry') return row.name.toLowerCase();
   if (col === 'ovr') return row.ovr;
   if (col === 'pts') return row.pts;
-  // A matchup column groups entries by WHICH TEAM they picked (not by
-  // correct/incorrect — that was the original bug: clicking a matchup
+  // Entry 303: a matchup column groups entries by WHICH TEAM they picked
+  // (not by correct/incorrect — that was the original bug: clicking a matchup
   // header sorted by result, so it never actually clustered everyone who
   // picked the same team together). Returns the team abbrev as the sort
   // key so every "HOU" pick sorts adjacent to every other "HOU" pick;
@@ -6397,9 +6357,9 @@ function renderPickemTable() {
       }
       if (va == null) return 1;
       if (vb == null) return -1;
-      // Different teams picked — group by team first (Hanh's explicit ask,
-      // 2026-09-27: within a team group, highest Pts on top, then A-Z —
-      // NOT plain alphabetical-only as this used to be).
+      // Entry 307: different teams picked — group by team first (Hanh's
+      // explicit ask, 2026-09-27: within a team group, highest Pts on top,
+      // then A-Z — NOT plain alphabetical-only as this used to be).
       if (va !== vb) return dir === 'asc' ? (va < vb ? -1 : 1) : (va < vb ? 1 : -1);
       if (a.pts !== b.pts) return b.pts - a.pts;
       return a.name.localeCompare(b.name);
@@ -6437,8 +6397,10 @@ function renderPickemTable() {
     return `<tr>${cells}</tr>`;
   }).join('') : `<tr><td colspan="${4 + data.matchups.length}" style="text-align:center;color:var(--text3);padding:20px 0;">No entries match the current filter.</td></tr>`;
 
-  // table-layout:fixed so all matchup columns divide the remaining width
-  // evenly and the whole table fits the container without a horizontal
+  // Entry 302: 3-line "team/vs/team" stacked header layout (matchup-label/
+  // mu-team/mu-vs classes) plus table-layout:fixed so all matchup columns
+  // divide the remaining width evenly and the whole table fits the container
+  // without a horizontal
   // scrollbar, however many games are in a week (up to 16) — Hanh's
   // explicit ask (2026-09-27). Rank/Entry/OVR/Pts get fixed percentages
   // that work for 2-digit ranks and typical entry names; matchup columns
@@ -6568,7 +6530,7 @@ function renderPickemBump() {
   // size ever changes.
   const rankTicks = [1, 5, 10, 15, 20, 25, 30].filter(t => t <= n);
 
-  let axis = '';
+  let axis = ''; // Entry 305: axis/tick labels bumped 9px -> 11px, Hanh's ask 2026-09-27
   rankTicks.forEach(t => {
     const y = yScale(t);
     axis += `<line x1="${AXIS_X}" x2="${W - padR}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,${t===1?0.14:0.06})" stroke-width="1"/>`;
