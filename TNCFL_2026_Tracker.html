@@ -135,9 +135,10 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pickem-table tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);}
 .pickem-table tbody tr:nth-child(even){background:#2a2a2a;} /* Entry 309: zebra striping, Hanh's ask 2026-09-27 */
 .pickem-table tbody tr:hover{background:var(--bg3);}
-.pickem-table td{padding:14px 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.pickem-table td{padding:8px 6px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .pickem-table td.pk-rank{color:var(--text2);font-weight:700;text-align:center;}
-.pickem-table td.pk-entry{color:var(--text);font-weight:600;text-align:left;}
+.pickem-table td.pk-entry{color:var(--text);font-weight:600;text-align:left;white-space:normal;font-size:10pt;}
+.pickem-table .pk-entry-sub{color:var(--mustard);font-weight:400;font-size:9.5pt;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px;} /* Entry 312: real-name subtitle */
 .pickem-table td.pk-ovr{font-weight:700;color:var(--text2);text-align:center;}
 .pickem-table td.pk-pts{font-weight:700;color:var(--text);text-align:center;}
 .pickem-table td.pk-pick-td{text-align:center;padding:9px 2px;}
@@ -6390,7 +6391,11 @@ function renderPickemTable() {
 
   const bodyHtml = rows.length ? rows.map(row => {
     let cells = `<td class="pk-rank">${row.rank}</td>`;
-    cells += `<td class="pk-entry" title="${row.name}">${row.name}</td>`;
+    // Entry 312: real-name subtitle under the handle, when known (see
+    // pickemResolveRealName() in worker.js for the rename-proof mechanism).
+    cells += `<td class="pk-entry" title="${row.name}">${row.name}` +
+      (row.realName ? `<div class="pk-entry-sub">${row.realName}</div>` : '') +
+      `</td>`;
     cells += `<td class="pk-ovr">${row.ovr}</td>`;
     cells += `<td class="pk-pts">${row.pts}</td>`;
     row.picks.forEach(pick => { cells += `<td class="pk-pick-td">${pickemPickCellHtml(pick)}</td>`; });
