@@ -997,7 +997,7 @@ tfoot .grp-gap{background:var(--bg3)!important;}
     <div class="mod">
       <div class="wk-collapse">
         <div class="wk-collapse-header open" onclick="togglePickemStandings()">
-          <div class="wk-col-title">Pick'em Standings — Week <select id="pickem-wk" class="portal-wk-select" onclick="event.stopPropagation()" onchange="loadPickemTable(Number(this.value))"></select></div>
+          <div class="wk-col-title">Pick'em Standings — Week <select id="pickem-wk" class="portal-wk-select" onclick="event.stopPropagation()" onchange="pickemWeekChanged(Number(this.value))"></select></div>
           <div style="display:flex;align-items:center;gap:10px;">
             <button id="pickem-table-refresh-btn" onclick="event.stopPropagation(); loadPickemTable(null, true)" title="Refresh Pick'em standings" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -6271,6 +6271,16 @@ function pickemClearFilterPopover(col) {
   renderPickemTable();
 }
 
+// Entry 319 (2026-09-29): the Pick'em Standings week selector now drives
+// both the Standings table AND the "Pick'em Rank by Week" bump chart below
+// it, instead of just the table — picking Week 1 shows Week 1's results in
+// both places, Week 2 shows through Week 2, etc. renderPickemBump() is a
+// no-op if PICKEM_DATA hasn't loaded yet (guarded at its own top).
+function pickemWeekChanged(week) {
+  loadPickemTable(week);
+  renderPickemBump();
+}
+
 function initPickemTable() {
   PICKEM_TABLE_LOADED = true;
   const sel = document.getElementById('pickem-wk');
@@ -6552,10 +6562,23 @@ function renderPickemBump() {
   // This is the exact same bug class LIVE_WK was built to fix for
   // Standings/Transactions/etc at the Week 1->2 boundary (see its
   // definition above), so reuse it here instead of a second, separately
-  // maintained notion of "how many weeks are live." Math.max(1,...) keeps
-  // the same fallback the old code had: always show at least week 1 so the
-  // axis isn't empty pre-season.
-  const weeksToShow = Math.max(1, LIVE_WK);
+  // maintained notion of "how many weeks are live."
+  //
+  // Entry 319 (2026-09-29): weeksToShow now follows the Pick'em Standings
+  // table's own week selector (#pickem-wk) instead of always tracking
+  // LIVE_WK — per Hanh's ask, picking Week 1 in that selector truncates
+  // this chart to just Week 1's results, Week 2 truncates it through Week
+  // 2, etc., rather than the chart always showing the full season-to-date
+  // regardless of which week is selected. Falls back to LIVE_WK if the
+  // selector isn't in the DOM yet (shouldn't happen in practice — both are
+  // initialized together when the Pick'em tab first opens, see the
+  // `id==='pickem'` block), and is clamped to LIVE_WK either way since the
+  // selector's own options never exceed it. Math.max(1,...) keeps the same
+  // pre-season fallback the old code had: always show at least week 1 so
+  // the axis isn't empty.
+  const wkSelEl = document.getElementById('pickem-wk');
+  const selectedWk = (wkSelEl && wkSelEl.value) ? Number(wkSelEl.value) : LIVE_WK;
+  const weeksToShow = Math.max(1, Math.min(selectedWk, LIVE_WK));
 
   const W = 1200, H = Math.max(320, n * 16), padR = 70, padT = 16, padB = 26;
   // Entry 185 (2026-09-10): same AXIS_X/AXIS_GAP decoupling as Despair
