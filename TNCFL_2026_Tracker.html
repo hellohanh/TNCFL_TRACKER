@@ -1478,6 +1478,28 @@ async function fetchESPNData() {
   if (overlayEl) overlayEl.style.display = 'flex';
 
   try {
+    // Perf pass (2026-09-30): kick off every Worker fetch that doesn't
+    // depend on CURRENT_WK/TOTAL_WKS or on each other's results IMMEDIATELY,
+    // in parallel with the ESPN calls right below — previously these ran
+    // one-after-another much later in this function, stacking their
+    // round-trip latency onto the critical path for no reason (nothing
+    // about them needs to wait). Each resolves to a plain result object
+    // (never throws), so awaiting them later — right where their data is
+    // actually used — is a drop-in swap for the old direct `await fetch(...)`
+    // at each site.
+    const lockedWeekCountPromise = fetch(`${WORKER_URL}/locked-week-count`)
+      .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+      .catch(e => ({ ok: false, _err: e }));
+    const kickoffTimesPromise = fetch(`${WORKER_URL}/week-kickoff-times`)
+      .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+      .catch(e => ({ ok: false, _err: e }));
+    const faActivityPromise = fetch(`${WORKER_URL}/fa-activity`)
+      .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+      .catch(e => ({ ok: false, _err: e }));
+    const tdStatsPromise = fetch(`${WORKER_URL}/td-stats`)
+      .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+      .catch(e => ({ ok: false, _err: e }));
+
     // Fetch core views in parallel. mTransactions2 is fetched separately (below,
     // non-fatal) since it's a nice-to-have for weekly breakdown — if it fails or
     // its shape is off, WK_TRANS/WK_TRADES just fall back to zero arrays and the
@@ -1511,12 +1533,13 @@ async function fetchESPNData() {
     // Fails soft to 0 (pre-season display) if the Worker call fails.
     let lockedWeekCount = 0;
     try {
-      const lockedResp = await fetch(`${WORKER_URL}/locked-week-count`);
-      if (lockedResp.ok) {
-        const lockedData = await lockedResp.json();
-        lockedWeekCount = lockedData.highestLockedWeek || 0;
+      const lockedResult = await lockedWeekCountPromise; // kicked off at top of function — see perf pass note
+      if (lockedResult.ok) {
+        lockedWeekCount = (lockedResult.data && lockedResult.data.highestLockedWeek) || 0;
+      } else if (lockedResult._err) {
+        console.warn('[Locked Weeks] Worker fetch failed — TOTAL_WKS staying at 0.', lockedResult._err);
       } else {
-        console.warn('[Locked Weeks] Worker fetch not ok (status ' + lockedResp.status + ') — TOTAL_WKS staying at 0.');
+        console.warn('[Locked Weeks] Worker fetch not ok (status ' + lockedResult.status + ') — TOTAL_WKS staying at 0.');
       }
     } catch (lockedErr) {
       console.warn('[Locked Weeks] Worker fetch failed — TOTAL_WKS staying at 0.', lockedErr);
@@ -1846,12 +1869,13 @@ async function fetchESPNData() {
     // fetch fails, effectiveTxWeek() falls back to its old CURRENT_WK-only
     // logic, which is still correct for the current week's own boundary.
     try {
-      const kickoffTimesResp = await fetch(`${WORKER_URL}/week-kickoff-times`);
-      if (kickoffTimesResp.ok) {
-        const data = await kickoffTimesResp.json();
-        WEEK_KICKOFF_TIMES = data.kickoffTimes || {};
+      const kickoffTimesResult = await kickoffTimesPromise; // kicked off at top of function — see perf pass note
+      if (kickoffTimesResult.ok) {
+        WEEK_KICKOFF_TIMES = (kickoffTimesResult.data && kickoffTimesResult.data.kickoffTimes) || {};
+      } else if (kickoffTimesResult._err) {
+        console.warn('[Kickoff Times] Fetch failed — falling back to current-week-only boundary logic.', kickoffTimesResult._err);
       } else {
-        console.warn('[Kickoff Times] Fetch not ok (status ' + kickoffTimesResp.status + ') — falling back to current-week-only boundary logic.');
+        console.warn('[Kickoff Times] Fetch not ok (status ' + kickoffTimesResult.status + ') — falling back to current-week-only boundary logic.');
       }
     } catch (ktErr) {
       console.warn('[Kickoff Times] Fetch failed — falling back to current-week-only boundary logic.', ktErr);
@@ -2042,9 +2066,9 @@ async function fetchESPNData() {
     // accept the Worker's version for a week where it has at least as many
     // entries as what's already there.
     try {
-      const faResp = await fetch(`${WORKER_URL}/fa-activity`);
-      if (faResp.ok) {
-        const faAll = await faResp.json();
+      const faResult = await faActivityPromise; // kicked off at top of function — see perf pass note
+      if (faResult.ok) {
+        const faAll = faResult.data || {};
         const skipped = [];
         Object.keys(faAll).forEach(wk => {
           const incoming = faAll[wk] || [];
@@ -2057,8 +2081,10 @@ async function fetchESPNData() {
         });
         console.info('[FA Activity] Merged automated data for weeks:', Object.keys(faAll).filter(wk => !skipped.includes(wk)));
         if (skipped.length) console.warn('[FA Activity] Skipped Worker data for weeks (fewer entries than live parse — likely stale/empty on the Worker side):', skipped);
+      } else if (faResult._err) {
+        console.warn('[FA Activity] Worker fetch failed — using manual FA_ACTIVITY only.', faResult._err);
       } else {
-        console.warn('[FA Activity] Worker fetch not ok (status ' + faResp.status + ') — using manual FA_ACTIVITY only.');
+        console.warn('[FA Activity] Worker fetch not ok (status ' + faResult.status + ') — using manual FA_ACTIVITY only.');
       }
     } catch (faErr) {
       console.warn('[FA Activity] Worker fetch failed — using manual FA_ACTIVITY only.', faErr);
@@ -2070,12 +2096,14 @@ async function fetchESPNData() {
     // (the Recap tab's TD card renders a "not locked yet" state for any
     // week missing from it) rather than blocking the rest of the page.
     try {
-      const tdResp = await fetch(`${WORKER_URL}/td-stats`);
-      if (tdResp.ok) {
-        TD_STATS = await tdResp.json();
+      const tdResult = await tdStatsPromise; // kicked off at top of function — see perf pass note
+      if (tdResult.ok) {
+        TD_STATS = tdResult.data || {};
         console.info('[Touchdown Stats] Loaded weeks:', Object.keys(TD_STATS));
+      } else if (tdResult._err) {
+        console.warn('[Touchdown Stats] Worker fetch failed — TD cards will show as not-yet-locked.', tdResult._err);
       } else {
-        console.warn('[Touchdown Stats] Worker fetch not ok (status ' + tdResp.status + ') — TD cards will show as not-yet-locked.');
+        console.warn('[Touchdown Stats] Worker fetch not ok (status ' + tdResult.status + ') — TD cards will show as not-yet-locked.');
       }
     } catch (tdErr) {
       console.warn('[Touchdown Stats] Worker fetch failed — TD cards will show as not-yet-locked.', tdErr);
@@ -2143,14 +2171,28 @@ async function fetchESPNData() {
         console.warn('[Weekly Movement] week-schedule fetch failed.', schedFetchErr);
       }
 
-      for (let w = 1; w <= CURRENT_WK; w++) {
+      // Entry (perf pass, 2026-09-30): was a sequential `for` loop doing one
+      // `await fetch` per week — CURRENT_WK round trips stacked one after
+      // another instead of overlapped, the single biggest contributor to
+      // slow initial page load (grows every week of the season; by Week 17
+      // this alone would be 17 back-to-back round trips). Fetched in
+      // parallel via Promise.all instead, matching the mRoster/mTransactions2
+      // batches elsewhere in this function — writes still land at the
+      // explicit `w - 1` index, so completion order doesn't matter.
+      const snapResults = await Promise.all(
+        Array.from({ length: CURRENT_WK }, (_, i) => i + 1).map(w =>
+          fetch(`${WORKER_URL}/snapshots/${w}`)
+            .then(async r => ({ w, ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+            .catch(e => ({ w, ok: false, _err: e }))
+        )
+      );
+      snapResults.forEach(({ w, ok, status, data: snapData, _err }) => {
+        if (!ok) {
+          if (_err) console.warn('[Weekly Movement] snapshot fetch/parse failed for week ' + w, _err);
+          else console.warn('[Weekly Movement] snapshots fetch not ok for week ' + w + ' (status ' + status + ')');
+          return;
+        }
         try {
-          const snapResp = await fetch(`${WORKER_URL}/snapshots/${w}`);
-          if (!snapResp.ok) {
-            console.warn('[Weekly Movement] snapshots fetch not ok for week ' + w + ' (status ' + snapResp.status + ')');
-            continue;
-          }
-          const snapData = await snapResp.json();
           const snaps = snapData.snapshots || {};
           const isCurrentWk = (w === CURRENT_WK);
           const sessionNames = (isCurrentWk && currentWkScheduleNames && currentWkScheduleNames.length)
@@ -2170,7 +2212,7 @@ async function fetchESPNData() {
         } catch (weekErr) {
           console.warn('[Weekly Movement] snapshot fetch/parse failed for week ' + w, weekErr);
         }
-      }
+      });
       console.info('[Weekly Movement] Synced snapshot data through Week ' + CURRENT_WK);
     } catch (movErr) {
       console.warn('[Weekly Movement] snapshot sync failed — MOV_DATA left as-is.', movErr);
