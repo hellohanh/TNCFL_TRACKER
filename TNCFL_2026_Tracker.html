@@ -111,18 +111,23 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pk-filter-popover{
   position:fixed;z-index:9999;background:var(--bg2);border:1px solid var(--border);
   border-radius:var(--r);box-shadow:0 8px 24px rgba(0,0,0,0.5);width:200px;
-  font-size:12px;color:var(--text);display:none;text-transform:none;letter-spacing:normal;
+  font-size:12px;color:var(--text);display:none;flex-direction:column;text-transform:none;letter-spacing:normal;
   cursor:default;font-weight:400;
 }
-.pk-filter-popover .pkf-search{width:100%;box-sizing:border-box;padding:6px 8px;border:none;
+.pk-filter-popover .pkf-search{flex:0 0 auto;width:100%;box-sizing:border-box;padding:6px 8px;border:none;
   border-bottom:1px solid var(--border);background:var(--bg3);color:var(--text);font-size:12px;
   border-radius:var(--r) var(--r) 0 0;outline:none;}
-.pk-filter-popover .pkf-list{max-height:220px;overflow-y:auto;padding:6px 4px;}
+/* pkf-list is the ONLY part that scrolls (Select All + Clear/Apply stay put)
+   — its max-height is set inline per-open from available viewport space so
+   the Clear/Apply row never gets pushed off-screen (Entry: Hanh flagged the
+   Apply button being unreachable when the popover was taller than the
+   viewport). */
+.pk-filter-popover .pkf-list{flex:1 1 auto;min-height:0;overflow-y:auto;padding:6px 4px;}
 .pk-filter-popover .pkf-row{display:flex;align-items:center;gap:7px;padding:4px 8px;cursor:pointer;border-radius:4px;}
 .pk-filter-popover .pkf-row:hover{background:var(--bg3);}
-.pk-filter-popover .pkf-row.pkf-selectall{border-bottom:1px solid var(--border);margin-bottom:3px;padding-bottom:7px;font-weight:600;}
+.pk-filter-popover .pkf-row.pkf-selectall{flex:0 0 auto;border-bottom:1px solid var(--border);margin-bottom:3px;padding-bottom:7px;font-weight:600;}
 .pk-filter-popover .pkf-row label{cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
-.pk-filter-popover .pkf-actions{display:flex;gap:6px;padding:8px;border-top:1px solid var(--border);}
+.pk-filter-popover .pkf-actions{flex:0 0 auto;display:flex;gap:6px;padding:8px;border-top:1px solid var(--border);}
 .pk-filter-popover .pkf-btn{flex:1;padding:6px 0;border-radius:6px;border:1px solid var(--border);
   background:var(--bg3);color:var(--text);font-size:11px;font-weight:700;cursor:pointer;text-align:center;}
 .pk-filter-popover .pkf-btn:hover{background:var(--bg4);}
@@ -159,6 +164,37 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pickem-table .pk-result-dot.wrong{background:var(--red);color:#fff;}
 .pickem-table .pk-dash{color:var(--text3);}
 .pickem-table .pk-abbr-fallback{font-size:10px;font-weight:800;color:var(--text2);background:var(--bg4);border-radius:5px;width:30px;height:30px;display:flex;align-items:center;justify-content:center;}
+
+/* QB Depth Chart by Manager table (Draft tab) — sortable-header convention
+   matches .pickem-table above exactly. */
+/* 60% width (Hanh's explicit ask) — a 5-column table left a lot of empty
+   space stretched to the card's full width like the Pick'em Standings
+   table (which needs the extra room for its many matchup columns). */
+#qb-depth-wrap{width:60%;min-width:460px;}
+.qb-depth-table{border-collapse:collapse;width:100%;font-size:12.5px;}
+.qb-depth-table thead th{text-align:left;padding:8px 12px;font-size:10px;font-weight:700;letter-spacing:0.04em;text-transform:uppercase;color:var(--text3);border-bottom:1px solid var(--border);background:var(--bg2);white-space:nowrap;cursor:pointer;user-select:none;}
+.qb-depth-table thead th:hover{color:var(--text2);}
+.qb-depth-table thead th.sorted{color:var(--mustard);}
+.qb-depth-table thead th .arrow{margin-left:4px;font-size:9px;opacity:0.35;}
+.qb-depth-table thead th.sorted .arrow{opacity:1;}
+.qb-depth-table tbody tr{border-bottom:1px solid rgba(255,255,255,0.04);}
+.qb-depth-table tbody tr:nth-child(even){background:#2a2a2a;}
+.qb-depth-table tbody tr:hover{background:var(--bg3);}
+.qb-depth-table td{padding:8px 12px;color:var(--text);white-space:nowrap;text-align:left;}
+.qb-depth-table td.proj{font-variant-numeric:tabular-nums;font-weight:700;color:var(--text);}
+.qb-depth-table .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle;}
+.qb-depth-table .mgr-name{font-weight:600;color:var(--text);}
+.qb-depth-table .qb-team-badge{display:inline-block;font-size:10px;font-weight:800;color:var(--text2);background:var(--bg4);border-radius:5px;padding:2px 6px;letter-spacing:0.02em;}
+.qb-depth-table .qb-name{font-weight:600;}
+.qb-depth-table .depth-badge{display:inline-block;padding:2px 9px;border-radius:999px;font-size:10.5px;font-weight:800;letter-spacing:0.02em;}
+.qb-depth-table .depth-badge.d1{background:rgba(217,165,33,0.18);color:var(--mustard);border:1px solid rgba(217,165,33,0.4);}
+.qb-depth-table .depth-badge.d2{background:rgba(255,255,255,0.06);color:var(--text2);border:1px solid var(--border);}
+.qb-depth-table .depth-badge.d3{background:rgba(255,255,255,0.03);color:var(--text3);border:1px solid var(--border);}
+.qb-depth-table .fa-label{color:var(--text3);font-style:italic;font-weight:600;}
+.qb-depth-table .qb-status-badge{display:inline-block;margin-left:6px;padding:1px 5px;border:1px solid;border-radius:4px;font-size:9.5px;font-weight:800;letter-spacing:0.02em;vertical-align:middle;}
+.qb-depth-table .pk-filter-icon{margin-left:5px;font-size:9px;opacity:0.45;cursor:pointer;display:inline-block;}
+.qb-depth-table .pk-filter-icon:hover{opacity:0.9;}
+.qb-depth-table .pk-filter-icon.active{opacity:1;color:var(--mustard);}
 
 .banner{background:var(--bg2);border:1px solid var(--border);border-left:4px solid var(--red);border-radius:var(--r-lg);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;}
 .banner h2{font-family:'Segoe UI Black','Segoe UI',sans-serif;font-weight:900;font-size:22px;color:#fff;}
@@ -982,6 +1018,37 @@ tfoot .grp-gap{background:var(--bg3)!important;}
 
   <!-- 2026 DRAFT TAB (Entry 188) -->
   <div id="tab-draft" style="display:none;">
+    <!-- QB Depth Chart by Manager (Entry: QB depth chart feature) — default collapsed -->
+    <div class="mod">
+      <div class="wk-collapse">
+        <div class="wk-collapse-header" onclick="toggleQbDepthChart()">
+          <div>
+            <div class="wk-col-title">QB Depth Chart by Manager</div>
+            <div class="wk-col-sub">Real-life NFL depth chart rank + this week's projected points</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <button id="qb-depth-refresh-btn" onclick="event.stopPropagation(); loadQbDepthChart(true)" title="Refresh QB data" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
+                <path d="M21 3v6h-6"/>
+              </svg>
+            </button>
+            <div class="wk-chevron">▼</div>
+          </div>
+        </div>
+        <div class="wk-collapse-body" id="qb-depth-body">
+          <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">Every column is sortable — click any header to sort by it (click again to reverse). A manager's rostered QB shows at any depth; an unrostered QB only shows if he's a real QB1 or QB2.</div>
+          <div id="qb-depth-status" style="font-size:12px;color:var(--text3);padding:20px 0;">Loading…</div>
+          <div id="qb-depth-wrap" class="pickem-table-wrap" style="display:none;">
+            <table class="qb-depth-table">
+              <thead id="qb-depth-thead"></thead>
+              <tbody id="qb-depth-rows"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="qb-depth-filter-popover" class="pk-filter-popover"></div>
     <div class="mod">
       <div style="display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:6px;margin-bottom:2px;">
         <div class="mod-label" style="margin-bottom:0;">2026 Draft Board</div>
@@ -5556,6 +5623,329 @@ function renderDraft() {
   metaEls.forEach(el => { el.style.fontSize = minMetaFit + 'px'; });
 }
 
+// ── QB DEPTH CHART BY MANAGER (Draft tab) ────────────────────────────────
+// Every real NFL QB1/QB2 (plus any rostered QB at any depth), joined with
+// which manager in this league owns him and this week's projected points.
+// Data is pre-joined server-side by the Worker's GET /qb-depth-chart/:week
+// (real NFL depth chart rank from ESPN's sports.core.api + roster ownership
+// from mRoster + free-agent name/proj from ESPN's player pool) — this side
+// just fetches, sorts, and renders it. Default collapsed on load.
+//
+// Filter rule (Hanh's explicit, corrected spec): a manager's ROSTERED QB
+// shows at ANY depth; an UNROSTERED (free-agent) QB only shows if he's a
+// real QB1 or QB2 — a free-agent QB3+ never shows. Applied server-side.
+let QB_DEPTH_DATA = null;       // { week, rows: [{managerId, isFreeAgent, team, name, proj, depth}] }
+let QB_DEPTH_LOADED = false;
+const QB_DEPTH_COL_HEADER_ORDER = ['manager', 'team', 'name', 'proj', 'depth']; // left-to-right column layout
+// Tiebreak priority when a column's own sort has ties — per Hanh's explicit
+// spec, sorting by Manager cascades Manager -> QB Team -> Depth (A-Z at
+// each level); Name/Proj are appended after Depth only as a final tiebreak.
+const QB_DEPTH_COL_PRIORITY = ['manager', 'team', 'depth', 'name', 'proj'];
+const QB_DEPTH_COL_LABEL = { manager: 'Manager', team: 'QB Team', name: 'QB Name', proj: 'Proj', depth: 'Depth' };
+
+// Game-status badge next to the QB Name (Hanh's explicit ask) — not its own
+// sortable column, just a small letter badge rendered inline after the
+// name, matching the Worker's `status` field (ESPN's own player.injuryStatus
+// string). ACTIVE (healthy) or missing/unrecognized -> no badge at all.
+const QB_STATUS_BADGE = {
+  QUESTIONABLE: { abbr: 'Q', color: '#D9A521' },
+  DOUBTFUL: { abbr: 'D', color: '#e0862f' },
+  OUT: { abbr: 'O', color: '#C0252B' },
+  INJURY_RESERVE: { abbr: 'IR', color: '#C0252B' },
+  PHYSICALLY_UNABLE_TO_PERFORM: { abbr: 'PUP', color: '#C0252B' },
+  SUSPENSION: { abbr: 'SUSP', color: '#C0252B' },
+};
+function qbDepthStatusBadgeHtml(status) {
+  const info = status && QB_STATUS_BADGE[status];
+  if (!info) return '';
+  return `<span class="qb-status-badge" style="color:${info.color};border-color:${info.color};" title="${status.replace(/_/g, ' ')}">${info.abbr}</span>`;
+}
+let QB_DEPTH_SORT = { col: 'manager', dir: 'asc' }; // default sort: Manager A-Z, Free Agents sink to bottom
+
+// Excel-style column filters on Manager and QB Team (Hanh's explicit ask,
+// extended from Manager-only to also cover Team) — same checkbox-dropdown
+// mechanism as the Pick'em Standings table's Entry/OVR/Pts filters (see
+// pickemOpenFilterPopover() etc.), generalized here to any of this table's
+// filterable columns. Each value is either null (no filter — show
+// everything) or a Set of the exact display values to keep.
+const QB_DEPTH_FILTERABLE_COLS = ['manager', 'team'];
+let QB_DEPTH_FILTERS = { manager: null, team: null };
+let QB_DEPTH_FILTER_EDIT_COL = null;
+let QB_DEPTH_FILTER_OUTSIDE_HANDLER = null;
+
+function qbDepthFilterDisplayValue(row, col) {
+  if (col === 'manager') {
+    if (row.isFreeAgent) return 'FREE AGENTS';
+    const mgr = ESPN_ID_MAP[row.managerId];
+    return mgr ? mgr.name : 'Unknown';
+  }
+  if (col === 'team') return row.team;
+  return null;
+}
+
+function qbDepthPassesFilters(row) {
+  for (const col of QB_DEPTH_FILTERABLE_COLS) {
+    const filterSet = QB_DEPTH_FILTERS[col];
+    if (filterSet && !filterSet.has(qbDepthFilterDisplayValue(row, col))) return false;
+  }
+  return true;
+}
+
+function qbDepthFilterIconHtml(col) {
+  if (!QB_DEPTH_FILTERABLE_COLS.includes(col)) return '';
+  const active = QB_DEPTH_FILTERS[col] ? 'active' : '';
+  return `<span class="pk-filter-icon ${active}" title="Filter" onclick="event.stopPropagation(); qbDepthOpenFilterPopover('${col}', this);">▾</span>`;
+}
+
+// Unique values always come from the FULL unfiltered row set, so a
+// column's dropdown always offers every possible value regardless of any
+// currently-active filter on that or another column — same as Excel.
+function qbDepthUniqueFilterValues(col) {
+  if (!QB_DEPTH_DATA) return [];
+  const seen = new Set();
+  (QB_DEPTH_DATA.rows || []).forEach(row => seen.add(qbDepthFilterDisplayValue(row, col)));
+  return [...seen].sort((a, b) => a.localeCompare(b));
+}
+
+// Shared positioning helper for the Excel-style filter popovers (QB Depth
+// Chart's Manager filter and Pick'em Standings' Entry/OVR/Pts filters) —
+// clamps horizontally to the viewport, and picks whichever of
+// below/above the clicked funnel icon has more room, capping the
+// popover's own max-height to that available space (via the .pkf-list
+// flex child scrolling — see its CSS) so the Select All row and
+// Clear/Apply buttons are never pushed off-screen by a long value list.
+function positionFilterPopover(pop, iconEl) {
+  const r = iconEl.getBoundingClientRect();
+  pop.style.display = 'flex';
+  const popW = pop.offsetWidth || 200;
+  let left = r.left;
+  if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
+  pop.style.left = Math.max(8, left) + 'px';
+
+  const margin = 12;
+  const spaceBelow = window.innerHeight - r.bottom - margin;
+  const spaceAbove = r.top - margin;
+  if (spaceBelow >= 160 || spaceBelow >= spaceAbove) {
+    pop.style.top = (r.bottom + 4) + 'px';
+    pop.style.bottom = 'auto';
+    pop.style.maxHeight = Math.max(120, spaceBelow) + 'px';
+  } else {
+    pop.style.bottom = (window.innerHeight - r.top + 4) + 'px';
+    pop.style.top = 'auto';
+    pop.style.maxHeight = Math.max(120, spaceAbove) + 'px';
+  }
+}
+
+function qbDepthOpenFilterPopover(col, iconEl) {
+  const pop = document.getElementById('qb-depth-filter-popover');
+  if (QB_DEPTH_FILTER_EDIT_COL === col && pop.style.display === 'flex') {
+    qbDepthCloseFilterPopover();
+    return;
+  }
+  QB_DEPTH_FILTER_EDIT_COL = col;
+  const values = qbDepthUniqueFilterValues(col);
+  const currentSet = QB_DEPTH_FILTERS[col]; // null = everything currently checked
+  const allChecked = !currentSet;
+
+  const rowsHtml = values.map(v => {
+    const checked = allChecked || currentSet.has(v);
+    const vAttr = String(v).replace(/"/g, '&quot;');
+    return `<div class="pkf-row"><input type="checkbox" class="pkf-val" value="${vAttr}" ${checked ? 'checked' : ''} id="qbf-val-${vAttr}">` +
+      `<label for="qbf-val-${vAttr}">${v}</label></div>`;
+  }).join('');
+
+  pop.innerHTML =
+    `<input type="text" class="pkf-search" placeholder="Search…" oninput="qbDepthFilterSearchInput(this)">` +
+    `<div class="pkf-row pkf-selectall"><input type="checkbox" id="qbf-selectall" ${allChecked ? 'checked' : ''} onchange="qbDepthFilterToggleAll(this)"><label for="qbf-selectall">(Select All)</label></div>` +
+    `<div class="pkf-list">${rowsHtml || '<div class="pkf-empty">No values</div>'}</div>` +
+    `<div class="pkf-actions"><span class="pkf-btn" onclick="qbDepthClearFilterPopover('${col}')">Clear</span><span class="pkf-btn pkf-apply" onclick="qbDepthApplyFilterPopover('${col}')">Apply</span></div>`;
+
+  positionFilterPopover(pop, iconEl);
+
+  // Close on an outside click; deferred so the click that opened this
+  // popover doesn't immediately close it via the same event bubbling up.
+  if (QB_DEPTH_FILTER_OUTSIDE_HANDLER) document.removeEventListener('mousedown', QB_DEPTH_FILTER_OUTSIDE_HANDLER);
+  QB_DEPTH_FILTER_OUTSIDE_HANDLER = (e) => {
+    if (!pop.contains(e.target)) qbDepthCloseFilterPopover();
+  };
+  setTimeout(() => document.addEventListener('mousedown', QB_DEPTH_FILTER_OUTSIDE_HANDLER), 0);
+}
+
+function qbDepthCloseFilterPopover() {
+  const pop = document.getElementById('qb-depth-filter-popover');
+  pop.style.display = 'none';
+  pop.innerHTML = '';
+  QB_DEPTH_FILTER_EDIT_COL = null;
+  if (QB_DEPTH_FILTER_OUTSIDE_HANDLER) {
+    document.removeEventListener('mousedown', QB_DEPTH_FILTER_OUTSIDE_HANDLER);
+    QB_DEPTH_FILTER_OUTSIDE_HANDLER = null;
+  }
+}
+
+function qbDepthFilterToggleAll(cb) {
+  document.querySelectorAll('#qb-depth-filter-popover .pkf-val').forEach(el => {
+    if (el.closest('.pkf-row').style.display !== 'none') el.checked = cb.checked;
+  });
+}
+
+function qbDepthFilterSearchInput(input) {
+  const q = input.value.trim().toLowerCase();
+  document.querySelectorAll('#qb-depth-filter-popover .pkf-list .pkf-row').forEach(row => {
+    const label = row.querySelector('label').textContent.toLowerCase();
+    row.style.display = label.includes(q) ? '' : 'none';
+  });
+}
+
+function qbDepthApplyFilterPopover(col) {
+  const checkboxes = [...document.querySelectorAll('#qb-depth-filter-popover .pkf-val')];
+  const checked = checkboxes.filter(cb => cb.checked);
+  if (checked.length === checkboxes.length) {
+    QB_DEPTH_FILTERS[col] = null; // everything selected == no filter
+  } else {
+    QB_DEPTH_FILTERS[col] = new Set(checked.map(cb => cb.value));
+  }
+  qbDepthCloseFilterPopover();
+  renderQbDepthTable();
+}
+
+function qbDepthClearFilterPopover(col) {
+  QB_DEPTH_FILTERS[col] = null;
+  qbDepthCloseFilterPopover();
+  renderQbDepthTable();
+}
+
+function toggleQbDepthChart() {
+  const body = document.getElementById('qb-depth-body');
+  const header = body.previousElementSibling;
+  const chevron = header.querySelector('.wk-chevron');
+  const isOpen = body.classList.contains('open');
+  if (isOpen) {
+    body.classList.remove('open');
+    header.classList.remove('open');
+    chevron.classList.remove('open');
+  } else {
+    body.classList.add('open');
+    header.classList.add('open');
+    chevron.classList.add('open');
+    if (!QB_DEPTH_LOADED) loadQbDepthChart(false);
+  }
+}
+
+async function loadQbDepthChart(isManualRefresh) {
+  const statusEl = document.getElementById('qb-depth-status');
+  const wrapEl = document.getElementById('qb-depth-wrap');
+  const btn = document.getElementById('qb-depth-refresh-btn');
+  if (btn && isManualRefresh) btn.style.opacity = 0.3;
+  statusEl.style.display = '';
+  statusEl.textContent = 'Loading…';
+  wrapEl.style.display = 'none';
+  try {
+    const week = CURRENT_WK || 1;
+    const forceParam = isManualRefresh ? '?force=1' : '';
+    const resp = await fetch(`${WORKER_URL}/qb-depth-chart/${week}${forceParam}`);
+    if (!resp.ok) throw new Error('Worker qb-depth-chart fetch not ok (' + resp.status + ')');
+    const data = await resp.json();
+    if (!data.live) throw new Error(data.error || 'Worker could not build the QB depth chart');
+    QB_DEPTH_DATA = data;
+    QB_DEPTH_LOADED = true;
+    QB_DEPTH_SORT = { col: 'manager', dir: 'asc' };
+    renderQbDepthTable();
+    statusEl.style.display = 'none';
+    wrapEl.style.display = '';
+    if (data.stale) {
+      statusEl.style.display = '';
+      statusEl.textContent = "Showing last known QB data — couldn't reach ESPN just now (" + (data.staleReason || 'unknown error') + ").";
+    }
+  } catch (e) {
+    console.error('[QB Depth Chart] load failed:', e);
+    statusEl.style.display = '';
+    statusEl.textContent = "Couldn't load the QB depth chart — try the refresh button.";
+    wrapEl.style.display = 'none';
+  } finally {
+    if (btn && isManualRefresh) btn.style.opacity = 0.6;
+  }
+}
+
+function qbDepthColValue(row, col) {
+  if (col === 'manager') return row.isFreeAgent ? 'free agents' : (ESPN_ID_MAP[row.managerId] ? ESPN_ID_MAP[row.managerId].name.toLowerCase() : '');
+  if (col === 'team') return row.team.toLowerCase();
+  if (col === 'name') return row.name.toLowerCase();
+  if (col === 'proj') return row.proj;
+  if (col === 'depth') return row.depth;
+}
+
+function qbDepthCompare(a, b, col) {
+  const va = qbDepthColValue(a, col), vb = qbDepthColValue(b, col);
+  if (va < vb) return -1;
+  if (va > vb) return 1;
+  return 0;
+}
+
+function sortQbDepthRows(rows) {
+  const { col, dir } = QB_DEPTH_SORT;
+  const chain = [col, ...QB_DEPTH_COL_PRIORITY.filter(c => c !== col)];
+  return rows.slice().sort((a, b) => {
+    // On the Manager column specifically, FREE AGENTS rows always sink to
+    // the bottom — regardless of asc/desc — rather than sorting
+    // alphabetically. Checked BEFORE the direction flip below so a Z-A sort
+    // still puts Free Agents last, not first. Only applies when Manager is
+    // the column actually being sorted — Free Agents mix in normally on
+    // every other column (Team/Name/Proj/Depth).
+    if (col === 'manager' && a.isFreeAgent !== b.isFreeAgent) {
+      return a.isFreeAgent ? 1 : -1;
+    }
+    for (let i = 0; i < chain.length; i++) {
+      const c = chain[i];
+      let cmp = qbDepthCompare(a, b, c);
+      if (cmp !== 0) {
+        // Only the PRIMARY (clicked) column's comparison respects the
+        // toggled direction — every tiebreak level below it always sorts
+        // ascending, regardless of which direction the primary column is
+        // currently sorted.
+        if (c === col && dir === 'desc') cmp = -cmp;
+        return cmp;
+      }
+    }
+    return 0;
+  });
+}
+
+function sortQbDepthBy(col) {
+  if (QB_DEPTH_SORT.col === col) {
+    QB_DEPTH_SORT.dir = QB_DEPTH_SORT.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    QB_DEPTH_SORT = { col, dir: 'asc' };
+  }
+  renderQbDepthTable();
+}
+
+function renderQbDepthTable() {
+  if (!QB_DEPTH_DATA) return;
+  const arrow = col => QB_DEPTH_SORT.col === col ? (QB_DEPTH_SORT.dir === 'asc' ? '▲' : '▼') : '▲';
+  const sortedClass = col => QB_DEPTH_SORT.col === col ? 'sorted' : '';
+  const thead = document.getElementById('qb-depth-thead');
+  thead.innerHTML = '<tr>' + QB_DEPTH_COL_HEADER_ORDER.map(col => {
+    return `<th class="${sortedClass(col)}" onclick="sortQbDepthBy('${col}')">${QB_DEPTH_COL_LABEL[col]} <span class="arrow">${arrow(col)}</span>${qbDepthFilterIconHtml(col)}</th>`;
+  }).join('') + '</tr>';
+
+  const filtered = (QB_DEPTH_DATA.rows || []).filter(qbDepthPassesFilters);
+  const rows = sortQbDepthRows(filtered);
+  document.getElementById('qb-depth-rows').innerHTML = rows.map(qb => {
+    const mgr = !qb.isFreeAgent ? ESPN_ID_MAP[qb.managerId] : null;
+    const depthClass = 'd' + Math.min(qb.depth, 3); // QB4+ (rare, rostered-only) shares QB3's dimmest tier styling
+    return `
+      <tr>
+        <td>${qb.isFreeAgent
+          ? `<span class="fa-label">FREE AGENTS</span>`
+          : `<span class="dot" style="background:${mgr ? mgr.color : '#666'}"></span><span class="mgr-name">${mgr ? mgr.name : 'Unknown'}</span>`}</td>
+        <td><span class="qb-team-badge">${qb.team}</span></td>
+        <td class="qb-name">${qb.name}${qbDepthStatusBadgeHtml(qb.status)}</td>
+        <td class="proj">${Number(qb.proj || 0).toFixed(1)}</td>
+        <td><span class="depth-badge ${depthClass}">QB${qb.depth}</span></td>
+      </tr>`;
+  }).join('');
+}
+
 // ── RECAP GENERATOR DATA (Entry 258, session S048) ──────────────────────
 // All-time single-week high score, confirmed against the real record book
 // data (site_data.json, all_time_scores[0]) rather than assumed — used to
@@ -6185,7 +6575,7 @@ function pickemUniqueFilterValues(col) {
 
 function pickemOpenFilterPopover(col, iconEl) {
   const pop = document.getElementById('pickem-filter-popover');
-  if (PICKEM_FILTER_EDIT_COL === col && pop.style.display === 'block') {
+  if (PICKEM_FILTER_EDIT_COL === col && pop.style.display === 'flex') {
     pickemCloseFilterPopover();
     return;
   }
@@ -6208,15 +6598,7 @@ function pickemOpenFilterPopover(col, iconEl) {
     `<div class="pkf-list">${rowsHtml || '<div class="pkf-empty">No values</div>'}</div>` +
     `<div class="pkf-actions"><span class="pkf-btn" onclick="pickemClearFilterPopover('${col}')">Clear</span><span class="pkf-btn pkf-apply" onclick="pickemApplyFilterPopover('${col}')">Apply</span></div>`;
 
-  // Position under the clicked funnel icon, clamped so it never runs off
-  // the right edge of the viewport.
-  const r = iconEl.getBoundingClientRect();
-  pop.style.display = 'block';
-  const popW = pop.offsetWidth || 200;
-  let left = r.left;
-  if (left + popW > window.innerWidth - 8) left = window.innerWidth - popW - 8;
-  pop.style.left = Math.max(8, left) + 'px';
-  pop.style.top = (r.bottom + 4) + 'px';
+  positionFilterPopover(pop, iconEl);
 
   // Close on an outside click; deferred so the click that opened this
   // popover doesn't immediately close it via the same event bubbling up.
