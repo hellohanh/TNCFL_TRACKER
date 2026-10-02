@@ -6709,7 +6709,13 @@ function initPickemTable() {
   PICKEM_TABLE_LOADED = true;
   const sel = document.getElementById('pickem-wk');
   sel.innerHTML = '';
-  const maxWk = LIVE_WK > 0 ? LIVE_WK : 1;
+  // Entry 327: Pick'em is tied to the real NFL week, not fantasy scoring, so
+  // this deliberately uses CURRENT_WK (ESPN's raw "this week is in progress"
+  // flag) instead of LIVE_WK (which gates on fantasy points actually being
+  // nonzero — correct for Standings/Transactions, Entry 112/217, but wrong
+  // here: it left the Pick'em dropdown stuck one week behind right after
+  // kickoff, before any fantasy stats had posted live).
+  const maxWk = CURRENT_WK > 0 ? CURRENT_WK : 1;
   for (let w = 1; w <= maxWk; w++) {
     const opt = document.createElement('option');
     opt.value = w; opt.textContent = w;
