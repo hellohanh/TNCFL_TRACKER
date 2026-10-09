@@ -1490,9 +1490,11 @@ async function fetchESPNData() {
     const lockedWeekCountPromise = fetch(`${WORKER_URL}/locked-week-count`)
       .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
       .catch(e => ({ ok: false, _err: e }));
-    const kickoffTimesPromise = fetch(`${WORKER_URL}/week-kickoff-times`)
-      .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
-      .catch(e => ({ ok: false, _err: e }));
+    // Entry 331: kickoffTimesPromise is NO LONGER started here — it now starts
+    // right after the schedule submit finishes (see scheduleSyncPromise below),
+    // so the read can include the current week's just-submitted kickoff time.
+    // (The Entry 326 hoist had it racing ahead of the submit.)
+    let kickoffTimesPromise = null;
     const faActivityPromise = fetch(`${WORKER_URL}/fa-activity`)
       .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
       .catch(e => ({ ok: false, _err: e }));
@@ -1581,6 +1583,84 @@ async function fetchESPNData() {
         console.warn('[Live Scores] Re-scoped mMatchup fetch failed — falling back to period-0 data.', rescopeErr);
       }
     }
+
+    // ── NFL schedule keep-fresh (Entry 103, 2026-09-09; moved off the critical
+    // path in Entry 331, 2026-10-09) ────────────────────────────────────────
+    // The Worker's OWN server-side fetch to site.api.espn.com is blocked (live
+    // 403, Entry 103), so the browser fetches the scoreboard and hands the raw
+    // events to the Worker's POST /submit-schedule (session mapping + KV write),
+    // then reports any fully-final sessions via POST /report-session-final
+    // (Entry 281, idempotent). Still runs per visitor — but it only needs
+    // CURRENT_WK, so it now STARTS here and runs in the background while the
+    // roster/transaction/snapshot fetches below proceed, instead of stacking
+    // three sequential round trips onto the load. It is awaited once, later,
+    // where EARLIEST_KICKOFF_THIS_WK is first needed. Never rejects (all
+    // failures are caught and logged) — fails soft exactly like before.
+    const nflWeek = Math.max(CURRENT_WK, 1);
+    const scheduleSyncPromise = (async () => {
+      try {
+        const nflResp = await fetch(
+          `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${nflWeek}`
+        );
+        if (!nflResp.ok) {
+          console.warn('[Schedule] ESPN scoreboard fetch not ok (status ' + nflResp.status + ') — week_schedule not refreshed this load.');
+          return;
+        }
+        const nflData = await nflResp.json();
+        const events = nflData.events || [];
+        // Entry 145/153: earliest real kickoff this week — feeds
+        // effectiveTxWeek()'s per-transaction boundary fallback.
+        const kickoffs = events.map(e => new Date(e.date)).filter(d => !isNaN(d));
+        EARLIEST_KICKOFF_THIS_WK = kickoffs.length ? new Date(Math.min(...kickoffs)) : null;
+
+        const submitPromise = fetch(`${WORKER_URL}/submit-schedule`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ week: nflWeek, events }),
+        }).then(submitResp => {
+          if (submitResp.ok) console.info('[Schedule] Submitted Week ' + nflWeek + ' schedule (' + events.length + ' events) to Worker.');
+          else console.warn('[Schedule] Worker rejected schedule submission (status ' + submitResp.status + ').');
+        }).catch(e => console.warn('[Schedule] Schedule submit failed.', e));
+
+        // Entry 281: sessions whose games have ALL gone final (ET-based slots).
+        // Reported in the background AFTER the submit (the Worker's report
+        // handler uses the schedule the submit just stored); nothing waits on it.
+        try {
+          const bySession = {};
+          events.forEach(ev => {
+            const { etDay, etHour } = etPartsFor(ev.date);
+            const name = slotNameFor(etDay, etHour);
+            if (!name) return;
+            if (!bySession[name]) bySession[name] = [];
+            bySession[name].push(!!(ev.status && ev.status.type && ev.status.type.completed));
+          });
+          const finalSessions = Object.keys(bySession).filter(name => bySession[name].every(Boolean));
+          if (finalSessions.length > 0) {
+            submitPromise.then(() => fetch(`${WORKER_URL}/report-session-final`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ week: nflWeek, finalSessions }),
+            })).then(reportResp => {
+              if (reportResp.ok) console.info('[Schedule] Reported final sessions: ' + finalSessions.join(', '));
+              else console.warn('[Schedule] Worker rejected session-final report (status ' + reportResp.status + ').');
+            }).catch(finalErr => console.warn('[Schedule] Session-final report failed — the time-based fallback will still catch it eventually.', finalErr));
+          }
+        } catch (finalErr) {
+          console.warn('[Schedule] Session-final detection failed — the time-based fallback will still catch it eventually.', finalErr);
+        }
+        await submitPromise; // resolves (never rejects) once the submit is done
+      } catch (schedErr) {
+        // A CORS error from ESPN would show clearly here.
+        console.warn('[Schedule] Client-side NFL schedule fetch/submit failed — week_schedule not refreshed this load.', schedErr);
+      }
+    })();
+    // Entry 154 history read, now sequenced AFTER the submit (Entry 331) so the
+    // first load of a new week sees its own kickoff time in the record.
+    kickoffTimesPromise = scheduleSyncPromise.then(() =>
+      fetch(`${WORKER_URL}/week-kickoff-times`)
+        .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+        .catch(e => ({ ok: false, _err: e }))
+    );
 
     // ── Parse per-manager data from teams[] ──────────────────────────
     // transactionCounter.acquisitions = trans (add/drops)
@@ -1775,89 +1855,10 @@ async function fetchESPNData() {
     }
 
     { const sz = Math.max(0, maxEffectiveTxWeek() + 1);
-    // ── NFL schedule keep-fresh (Entry 103, 2026-09-09) ────────────────
-    // The Worker's OWN server-side fetch to site.api.espn.com is blocked
-    // with a live 403 (confirmed — added headers, still blocked; looks like
-    // an IP-level block against Cloudflare Workers' shared egress ranges,
-    // not fixable from the Worker side). Browsers are NOT blocked by this
-    // endpoint (it's how most public fantasy-football tools use it), so the
-    // Tracker fetches it directly here and hands the raw events to the
-    // Worker's new POST /submit-schedule, which does the actual
-    // session-mapping and KV write. Runs on every page load — keeps
-    // week_schedule fresh automatically, no manual step needed, no
-    // dependency on the Monday-only cron. Fails soft and silently: if this
-    // ever breaks (including a CORS block on ESPN's side, which hasn't been
-    // confirmed either way), nothing else in the Tracker is affected — this
-    // only feeds the Weekly Movement tab's session-snapshot timing.
-    try {
-      const nflWeek = Math.max(CURRENT_WK, 1);
-      const nflResp = await fetch(
-        `https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${nflWeek}`
-      );
-      if (nflResp.ok) {
-        const nflData = await nflResp.json();
-        const events = nflData.events || [];
-        // Entry 145/153 (2026-09-09): capture the earliest real kickoff time
-        // among this week's games — feeds effectiveTxWeek()'s per-transaction
-        // boundary for FA Activity/Transactions (was purely ESPN's
-        // scoringPeriodId flip, which happens days before any real game).
-        const kickoffs = events.map(e => new Date(e.date)).filter(d => !isNaN(d));
-        EARLIEST_KICKOFF_THIS_WK = kickoffs.length ? new Date(Math.min(...kickoffs)) : null;
-        const submitResp = await fetch(`${WORKER_URL}/submit-schedule`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ week: nflWeek, events }),
-        });
-        if (submitResp.ok) {
-          console.info('[Schedule] Submitted Week ' + nflWeek + ' schedule (' + events.length + ' events) to Worker.');
-        } else {
-          console.warn('[Schedule] Worker rejected schedule submission (status ' + submitResp.status + ').');
-        }
-
-        // Entry 281 (session S048): real per-game completion check — the
-        // FAST half of the actual-snapshot latency fix (the slow half is
-        // worker.js's own time-based fallback, for whenever nobody's here
-        // to run this). Groups this week's real games by session (the new
-        // ET-based derivation, not the stale SESSIONS_LABELS path) and
-        // reports any session whose games have ALL gone final
-        // (status.type.completed — confirmed live against ESPN's real
-        // response shape, not assumed). worker.js's new
-        // POST /report-session-final is itself idempotent, so this is safe
-        // to call on every page load even when nothing's actually changed.
-        try {
-          const bySession = {};
-          events.forEach(ev => {
-            const { etDay, etHour } = etPartsFor(ev.date);
-            const name = slotNameFor(etDay, etHour);
-            if (!name) return;
-            if (!bySession[name]) bySession[name] = [];
-            bySession[name].push(!!(ev.status && ev.status.type && ev.status.type.completed));
-          });
-          const finalSessions = Object.keys(bySession).filter(name => bySession[name].every(Boolean));
-          if (finalSessions.length > 0) {
-            const reportResp = await fetch(`${WORKER_URL}/report-session-final`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ week: nflWeek, finalSessions }),
-            });
-            if (reportResp.ok) {
-              console.info('[Schedule] Reported final sessions: ' + finalSessions.join(', '));
-            } else {
-              console.warn('[Schedule] Worker rejected session-final report (status ' + reportResp.status + ').');
-            }
-          }
-        } catch (finalErr) {
-          console.warn('[Schedule] Session-final detection/report failed — the time-based fallback will still catch it eventually.', finalErr);
-        }
-      } else {
-        console.warn('[Schedule] ESPN scoreboard fetch not ok (status ' + nflResp.status + ') — week_schedule not refreshed this load.');
-      }
-    } catch (schedErr) {
-      // If this is a CORS error, it'll show clearly in the console as such —
-      // that would mean ESPN's site API doesn't permit cross-origin browser
-      // fetches after all, and this approach needs rethinking.
-      console.warn('[Schedule] Client-side NFL schedule fetch/submit failed — week_schedule not refreshed this load.', schedErr);
-    }
+    // Entry 331: the NFL schedule sync (scoreboard fetch + submit + session-final
+    // report) was started earlier as scheduleSyncPromise; awaiting it here just
+    // guarantees EARLIEST_KICKOFF_THIS_WK is set before transactions are bucketed.
+    await scheduleSyncPromise;
 
     // Entry 154 (2026-09-09): fetch the FULL historical kickoff-time record
     // (every week's real kickoff, permanently accumulated by the Worker's
