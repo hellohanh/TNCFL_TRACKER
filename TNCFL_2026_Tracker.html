@@ -4318,7 +4318,7 @@ function startHMOTWAnim(crownM, displayWk){
   const tiedWith = HMOTW_WK[displayWk].filter(n => n !== crownM.name);
   const tieNote = tiedWith.length > 0 ? ' <span style="color:var(--text3);font-weight:400;">(tied w/ '+tiedWith.join(', ')+')</span>' : '';
   card.innerHTML=
-    '<div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:20px;">👑 This week\'s crown</div>'+
+    '<div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin-bottom:20px;">☔ This week\'s High Man</div>'+
     '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">'+
       '<div style="font-size:13px;font-weight:700;color:'+crownM.color+';">'+crownM.name+tieNote+'</div>'+
       '<div style="font-size:11px;color:var(--text3);">'+wkPts+' pts</div>'+
@@ -4541,7 +4541,7 @@ function startHMOTWAnim(crownM, displayWk){
 function renderHMOTW() {
   if(TOTAL_WKS===0){
     stopHMOTWAnim();
-    document.getElementById('crown-card').innerHTML='<div class="hcard-lbl">👑 This week\'s crown</div><div class="crown-sub" style="margin-top:12px;color:var(--text3)">Waiting for the current week\'s game to be completed</div>';
+    document.getElementById('crown-card').innerHTML='<div class="hcard-lbl">☔ This week\'s High Man</div><div class="crown-sub" style="margin-top:12px;color:var(--text3)">Waiting for the current week\'s game to be completed</div>';
     const maxD=Math.max(...Object.values(DROUGHT_BASE),1);
     const bars=[...MANAGERS].sort((a,b)=>(DROUGHT_BASE[b.name]||0)-(DROUGHT_BASE[a.name]||0)).map(m=>{
       const d=DROUGHT_BASE[m.name]||0;
