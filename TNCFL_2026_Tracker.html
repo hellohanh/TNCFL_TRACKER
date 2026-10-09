@@ -6606,7 +6606,7 @@ let PICKEM_TABLE_DATA = null;   // { week, matchups:[{propositionId,name,status}
 // column itself was removed from the table (Hanh's explicit ask,
 // 2026-09-28), and sorting by Pts descending reproduces the same order
 // rank was derived from in the first place.
-let PICKEM_TABLE_SORT = { col: 'pts', dir: 'desc' };
+let PICKEM_TABLE_SORT = { col: 'ovr', dir: 'desc' }; // Entry 330: default sort is OVR high-to-low (was Pts)
 
 // Entry 310: Excel-style column filters for Entry/OVR/Pts (Hanh's explicit
 // ask, 2026-09-27). Each value is either null (no filter — show everything) or a
@@ -6783,7 +6783,7 @@ async function loadPickemTable(week, isManualRefresh) {
     const stillWantedWeek = Number(document.getElementById('pickem-wk').value) || 1;
     if (data.week !== stillWantedWeek) return; // a slower response landed after the user already switched weeks
     PICKEM_TABLE_DATA = data;
-    PICKEM_TABLE_SORT = { col: 'pts', dir: 'desc' }; // Entry 315: Rank column removed
+    PICKEM_TABLE_SORT = { col: 'ovr', dir: 'desc' }; // Entry 315: Rank column removed; Entry 330: default is OVR, not Pts
     renderPickemTable();
     statusEl.style.display = 'none';
     wrapEl.style.display = '';
@@ -6900,6 +6900,9 @@ function renderPickemTable() {
     }
     if (va < vb) return dir === 'asc' ? -1 : 1;
     if (va > vb) return dir === 'asc' ? 1 : -1;
+    // Entry 330 (Hanh's ask, 2026-10-09): on a Pts tie, highest OVR first
+    // (regardless of the Pts sort direction), then Entry name A-Z.
+    if (col === 'pts' && a.ovr !== b.ovr) return (b.ovr || 0) - (a.ovr || 0);
     return a.name.localeCompare(b.name);
   }).filter(pickemPassesFilters);
 
