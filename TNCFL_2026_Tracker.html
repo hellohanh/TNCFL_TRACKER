@@ -92,6 +92,17 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .mod-label span{color:var(--red);}
 
 /* Pick'em standings table (Entry 299) */
+.pk-bump-clk{cursor:pointer;}.pk-bump-clk:hover{text-decoration:underline;} /* Entry 335: clickable chart names */
+#pickem-bump-chip{display:none;align-items:center;gap:8px;font-size:12px;margin:0 0 8px;padding:4px 10px;border:1px solid var(--border);border-radius:99px;width:fit-content;}
+#pickem-bump-chip.on{display:inline-flex;}
+#pickem-bump-chip b{font-weight:800;}
+#pickem-bump-chip button{background:none;border:none;color:var(--text2);cursor:pointer;font-size:15px;line-height:1;padding:0;}
+#pickem-bump-chip button:hover{color:var(--text);}
+#pickem-bump-menu{position:fixed;display:none;background:rgba(20,20,20,.98);border:1px solid var(--border);border-radius:8px;padding:6px;box-shadow:0 6px 20px rgba(0,0,0,.55);z-index:250;min-width:170px;max-height:260px;overflow:auto;}
+#pickem-bump-menu.on{display:block;}
+#pickem-bump-menu .mh{font-size:11px;color:var(--text3);padding:3px 8px 5px;}
+#pickem-bump-menu .mi{font-size:12.5px;font-weight:600;padding:5px 8px;border-radius:5px;cursor:pointer;white-space:nowrap;}
+#pickem-bump-menu .mi:hover{background:#2a2a2a;}
 .pickem-table-wrap{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);overflow-x:auto;}
 .pickem-table{border-collapse:collapse;width:100%;table-layout:fixed;font-size:12.5px;}
 .pickem-table thead th{
@@ -1083,6 +1094,7 @@ tfoot .grp-gap{background:var(--bg3)!important;}
       </div>
     </div>
     <div id="pickem-filter-popover" class="pk-filter-popover"></div>
+    <div id="pickem-bump-menu"></div>
     <div class="mod">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
         <div class="mod-label" style="margin-bottom:0;">Pick'em Rank by Week</div>
@@ -1093,7 +1105,8 @@ tfoot .grp-gap{background:var(--bg3)!important;}
           </svg>
         </button>
       </div>
-      <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">ESPN NFL Pick'em group — rank by cumulative correct picks, week by week. Hover a line to see who it is.</div>
+      <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">ESPN NFL Pick'em group — rank by cumulative correct picks, week by week. Hover a line to see who it is. <b style="color:var(--mustard);">Click a name on the right to follow just that entry.</b></div>
+      <div id="pickem-bump-chip"><span>Following: <b id="pickem-bump-chip-name"></b></span><button onclick="pickemBumpClear()" title="Show everyone" aria-label="Show everyone">×</button></div>
       <div id="pickem-status" style="font-size:12px;color:var(--text3);padding:20px 0;">Loading…</div>
       <div style="overflow:hidden;"><svg id="pickem-bump-svg" style="width:100%;display:none;overflow:visible;"></svg></div>
     </div>
@@ -6591,6 +6604,7 @@ const PICKEM_CHALLENGE = 'nfl-pickem-2026';
 const PICKEM_GROUP_ID = '205533cc-4c78-4c91-a0a3-a828976f5c6b';
 const PICKEM_URL = `https://gambit-api.fantasy.espn.com/apis/v1/challenges/${PICKEM_CHALLENGE}/groups/${PICKEM_GROUP_ID}?view=chui_pagetype_group_picks`;
 let PICKEM_LOADED = false;
+let PICKEM_BUMP_SELECTED = null; // Entry 335: entry NAME currently "followed" on the bump chart (null = show everyone)
 let PICKEM_DATA = null; // [{name, weeklyWins: [w1, w2, ...]}, ...] once loaded
 
 // ── PICK'EM STANDINGS TABLE (Entry 299) ─────────────────────────────────
@@ -7022,6 +7036,22 @@ async function loadPickemData(isManualRefresh) {
   }
 }
 
+// Entry 335 (Hanh's ask, 2026-10-10): click a name on the bump chart to fade
+// everyone else and follow just that entry's journey. Selection is stored by
+// entry name; clicks use the entry's index so odd characters in names can't
+// break attribute parsing.
+function pickemBumpPick(i) {
+  const e = PICKEM_DATA && PICKEM_DATA[i];
+  if (!e) return;
+  PICKEM_BUMP_SELECTED = (PICKEM_BUMP_SELECTED === e.name) ? null : e.name;
+  renderPickemBump();
+}
+function pickemBumpClear() {
+  PICKEM_BUMP_SELECTED = null;
+  const m = document.getElementById('pickem-bump-menu'); if (m) m.classList.remove('on');
+  renderPickemBump();
+}
+
 function renderPickemBump() {
   const svg = document.getElementById('pickem-bump-svg');
   if (!svg || !PICKEM_DATA) return;
@@ -7053,6 +7083,22 @@ function renderPickemBump() {
   const wkSelEl = document.getElementById('pickem-wk');
   const selectedWk = (wkSelEl && wkSelEl.value) ? Number(wkSelEl.value) : LIVE_WK;
   const weeksToShow = Math.max(1, Math.min(selectedWk, LIVE_WK));
+
+  // Entry 335: which entry (if any) is being followed. If the followed name
+  // is no longer in the data (e.g. after a refresh), quietly stop following.
+  let selIdx = PICKEM_BUMP_SELECTED == null ? -1 : PICKEM_DATA.findIndex(e => e.name === PICKEM_BUMP_SELECTED);
+  if (selIdx < 0) PICKEM_BUMP_SELECTED = null;
+  const bumpMenuEl = document.getElementById('pickem-bump-menu');
+  if (bumpMenuEl) bumpMenuEl.classList.remove('on');
+  const bumpChip = document.getElementById('pickem-bump-chip');
+  if (bumpChip) {
+    bumpChip.classList.toggle('on', selIdx >= 0);
+    if (selIdx >= 0) {
+      const cn = document.getElementById('pickem-bump-chip-name');
+      cn.textContent = PICKEM_DATA[selIdx].name;
+      cn.style.color = pickemColor(selIdx, n);
+    }
+  }
 
   const W = 1200, H = Math.max(320, n * 16), padR = 70, padT = 16, padB = 26;
   // Entry 185 (2026-09-10): same AXIS_X/AXIS_GAP decoupling as Despair
@@ -7108,14 +7154,27 @@ function renderPickemBump() {
     axis += `<text x="${xScale(w).toFixed(1)}" y="${H - 6}" text-anchor="middle" font-size="11" font-weight="700" fill="${played?'#777':'#333'}" font-family="Segoe UI,sans-serif">${w}</text>`;
   }
 
-  let lines = '', dots = '';
+  let lines = '', dots = '', followed = '';
   PICKEM_DATA.forEach((entry, i) => {
     const color = pickemColor(i, n);
     const rankArr = ranksByWeek.map(weekRanks => weekRanks[i]);
     let d = '';
     rankArr.forEach((r, w) => { d += (w === 0 ? 'M' : 'L') + `${xScale(w+1).toFixed(1)},${yScale(r).toFixed(1)}`; });
-    lines += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" opacity="0.75" class="pickem-line" data-name="${entry.name}"/>`;
-    rankArr.forEach((r, w) => {
+    if (i === selIdx) {
+      // Entry 335: the followed entry is drawn LAST (on top): soft glow +
+      // bold line + a rank label above every week's dot.
+      followed += `<path d="${d}" fill="none" stroke="${color}" stroke-width="7" opacity="0.18"/>`;
+      followed += `<path d="${d}" fill="none" stroke="${color}" stroke-width="3.2" opacity="1"/>`;
+      rankArr.forEach((r, w) => {
+        const cx = xScale(w+1).toFixed(1), cy = yScale(r).toFixed(1);
+        followed += `<circle cx="${cx}" cy="${cy}" r="4.5" fill="${color}" stroke="#111" stroke-width="1.5"/>`;
+        followed += `<text x="${cx}" y="${(yScale(r) - 9).toFixed(1)}" text-anchor="middle" font-size="12" font-weight="800" fill="${color}" font-family="Segoe UI,sans-serif">#${r}</text>`;
+      });
+      return;
+    }
+    const dim = selIdx >= 0;
+    lines += `<path d="${d}" fill="none" stroke="${color}" stroke-width="1.6" opacity="${dim ? 0.09 : 0.75}" class="pickem-line" data-name="${entry.name}"/>`;
+    if (!dim) rankArr.forEach((r, w) => {
       dots += `<circle cx="${xScale(w+1).toFixed(1)}" cy="${yScale(r).toFixed(1)}" r="2" fill="${color}" class="pickem-dot" data-name="${entry.name}" data-wk="${w+1}" data-rank="${r}"/>`;
     });
   });
@@ -7134,7 +7193,7 @@ function renderPickemBump() {
   PICKEM_DATA.forEach((entry, i) => {
     const r = lastRanks[i];
     if (!groupsByRank[r]) groupsByRank[r] = { y: yScale(r), members: [] };
-    groupsByRank[r].members.push({ name: entry.name, color: pickemColor(i, n), wins: entry.weeklyWins[weeksToShow - 1] });
+    groupsByRank[r].members.push({ idx: i, name: entry.name, color: pickemColor(i, n), wins: entry.weeklyWins[weeksToShow - 1] });
   });
   Object.values(groupsByRank).forEach(g => g.members.sort((a,b)=>a.name.localeCompare(b.name)));
   const lbls = Object.values(groupsByRank).sort((a,b)=>
@@ -7144,20 +7203,30 @@ function renderPickemBump() {
   const lblX = xScale(weeksToShow) + 8;
   let labels = '';
   lbls.forEach((L, gi) => {
+    const hasSel = selIdx >= 0 && L.members.some(m => m.idx === selIdx);
+    const faded = selIdx >= 0 && !hasSel ? 0.3 : 1;
     if (L.members.length === 1) {
-      labels += `<text x="${lblX}" y="${L.y+3}" font-size="11" font-weight="600" fill="${L.members[0].color}" font-family="Segoe UI,sans-serif">${L.members[0].name} <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
+      const m = L.members[0];
+      labels += `<text class="pk-bump-clk" data-i="${m.idx}" x="${lblX}" y="${L.y+3}" font-size="11" font-weight="${m.idx === selIdx ? 800 : 600}" fill="${m.color}" opacity="${faded}" font-family="Segoe UI,sans-serif">${m.name} <tspan opacity="0.65">(${m.wins})</tspan></text>`;
+    } else if (hasSel) {
+      // Followed entry sits in a tied group: show ITS name, plus how many others share the rank.
+      const m = L.members.find(x => x.idx === selIdx);
+      labels += `<text class="pickem-tie-lbl pk-bump-clk" data-idx="${gi}" x="${lblX}" y="${L.y+3}" font-size="11" font-weight="800" fill="${m.color}" font-family="Segoe UI,sans-serif">${m.name} <tspan opacity="0.65">(${m.wins})</tspan> <tspan fill="#888" font-weight="600">+${L.members.length - 1}</tspan></text>`;
     } else {
-      labels += `<text class="pickem-tie-lbl" data-idx="${gi}" x="${lblX}" y="${L.y+3}" font-size="11" font-weight="600" fill="#ccc" font-family="Segoe UI,sans-serif" style="cursor:default;">${L.members.length} players <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
+      labels += `<text class="pickem-tie-lbl pk-bump-clk" data-idx="${gi}" x="${lblX}" y="${L.y+3}" font-size="11" font-weight="600" fill="#ccc" opacity="${faded}" font-family="Segoe UI,sans-serif">${L.members.length} players <tspan opacity="0.65">(${L.members[0].wins})</tspan></text>`;
     }
   });
 
   svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
   svg.setAttribute('preserveAspectRatio','none');
-  svg.innerHTML = axis + lines + dots + labels;
+  svg.innerHTML = axis + lines + dots + followed + labels;
+  svg._pkGroups = lbls; // Entry 335: tied-group data for the click menu
 
   // Hover: highlight the hovered line/dots, show name in the shared tooltip.
   const tip = document.getElementById('sbox-tip');
-  svg.querySelectorAll('.pickem-line, .pickem-dot').forEach(el => {
+  // Entry 335: hover highlighting is skipped while following an entry (the
+  // rest of the chart is already faded on purpose).
+  if (selIdx < 0) svg.querySelectorAll('.pickem-line, .pickem-dot').forEach(el => {
     el.addEventListener('mouseenter', e => {
       const name = el.dataset.name;
       svg.querySelectorAll('.pickem-line').forEach(l => l.style.opacity = l.dataset.name === name ? '1' : '0.12');
@@ -7200,6 +7269,40 @@ function renderPickemBump() {
     });
     el.addEventListener('mouseleave', () => hideGapTip());
   });
+
+  // Entry 335: click handling, wired ONCE on the persistent <svg> (its inner
+  // markup is rebuilt every render, the element itself is not).
+  if (!svg._pkClickWired) {
+    svg._pkClickWired = true;
+    svg.addEventListener('click', ev => {
+      const t = ev.target.closest('.pk-bump-clk');
+      const menu = document.getElementById('pickem-bump-menu');
+      if (!t) { if (PICKEM_BUMP_SELECTED != null) pickemBumpClear(); else if (menu) menu.classList.remove('on'); return; }
+      ev.stopPropagation();
+      hideGapTip();
+      if (t.dataset.i !== undefined) { if (menu) menu.classList.remove('on'); pickemBumpPick(Number(t.dataset.i)); return; }
+      const g = (svg._pkGroups || [])[Number(t.dataset.idx)];
+      if (!g || !menu) return;
+      const r = t.getBoundingClientRect();
+      menu.innerHTML = `<div class="mh">${g.members.length} tied at ${g.members[0].wins} — pick one</div>` +
+        g.members.map(m => `<div class="mi" data-i="${m.idx}" style="color:${m.color}">${m.name}</div>`).join('');
+      menu.style.left = Math.min(r.right + 10, window.innerWidth - 200) + 'px';
+      menu.style.top = Math.max(8, Math.min(r.top - 8, window.innerHeight - 280)) + 'px';
+      menu.classList.add('on');
+    });
+    const menuEl = document.getElementById('pickem-bump-menu');
+    if (menuEl) menuEl.addEventListener('click', ev => {
+      const it = ev.target.closest('.mi');
+      if (it) { menuEl.classList.remove('on'); pickemBumpPick(Number(it.dataset.i)); }
+    });
+    document.addEventListener('click', ev => {
+      const menu = document.getElementById('pickem-bump-menu');
+      if (menu && !menu.contains(ev.target) && !ev.target.closest('.pk-bump-clk')) menu.classList.remove('on');
+    });
+    document.addEventListener('keydown', ev => {
+      if (ev.key === 'Escape' && (PICKEM_BUMP_SELECTED != null || (document.getElementById('pickem-bump-menu') || {}).classList && document.getElementById('pickem-bump-menu').classList.contains('on'))) pickemBumpClear();
+    });
+  }
 }
 
 // ── RENDER ALL ────────────────────────────────────────────────────────────
