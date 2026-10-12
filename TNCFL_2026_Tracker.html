@@ -1077,7 +1077,7 @@ tfoot .grp-gap{background:var(--bg3)!important;}
         <div class="wk-collapse-header open" onclick="togglePickemStandings()">
           <div class="wk-col-title">Pick'em Standings — Week <select id="pickem-wk" class="portal-wk-select" onclick="event.stopPropagation()" onchange="pickemWeekChanged(Number(this.value))"></select></div>
           <div style="display:flex;align-items:center;gap:10px;">
-            <button id="pickem-table-refresh-btn" onclick="event.stopPropagation(); loadPickemTable(null, true)" title="Refresh Pick'em standings" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
+            <button id="pickem-table-refresh-btn" onclick="event.stopPropagation(); pickemRefreshBoth()" title="Refresh Pick'em standings" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
                 <path d="M21 3v6h-6"/>
@@ -1098,7 +1098,7 @@ tfoot .grp-gap{background:var(--bg3)!important;}
     <div class="mod">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
         <div class="mod-label" style="margin-bottom:0;">Pick'em Rank by Week</div>
-        <button id="pickem-refresh-btn" onclick="loadPickemData(true)" title="Refresh Pick'em data" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
+        <button id="pickem-refresh-btn" onclick="pickemRefreshBoth()" title="Refresh Pick'em data" style="background:none;border:none;cursor:pointer;padding:4px;display:flex;align-items:center;opacity:0.6;transition:opacity .2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.6">
           <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--text3)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M21 12a9 9 0 1 1-2.64-6.36"/>
             <path d="M21 3v6h-6"/>
@@ -6755,6 +6755,12 @@ function pickemClearFilterPopover(col) {
 // it, instead of just the table — picking Week 1 shows Week 1's results in
 // both places, Week 2 shows through Week 2, etc. renderPickemBump() is a
 // no-op if PICKEM_DATA hasn't loaded yet (guarded at its own top).
+// Entry 337 (Hanh's ask, 2026-10-12): either Pick'em refresh icon (standings table
+// header or rank-by-week chart) refreshes BOTH panels together.
+function pickemRefreshBoth() {
+  return Promise.all([loadPickemTable(null, true), loadPickemData(true)]);
+}
+
 function pickemWeekChanged(week) {
   loadPickemTable(week);
   renderPickemBump();
