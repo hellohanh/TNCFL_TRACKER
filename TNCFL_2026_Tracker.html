@@ -3714,7 +3714,9 @@ function renderMovement() {
     let hmotwBadge;
     if (w < TOTAL_WKS) {
       const winnerClass = DHMOTW_WK[w] ? 'wk-badge dhmotw' : 'wk-badge hmotw';
-      hmotwBadge = `<span class="${winnerClass}">👑 ${HMOTW_WK[w].join(' & ')}</span><span class="wk-badge locked">🔒 Locked</span>`;
+      // Entry 344: winning score shown in the same chip -> "NAME : SCORE" (ties: each name with its score)
+      const hmotwLabel = HMOTW_WK[w].map(n => { const mm = MANAGERS.find(x => x.name === n); const sc = mm && mm.pts[w]; return (typeof sc === 'number' && isFinite(sc)) ? `${n} : ${sc.toFixed(2)}` : n; }).join(' & ');
+      hmotwBadge = `<span class="${winnerClass}">👑 ${hmotwLabel}</span><span class="wk-badge locked">🔒 Locked</span>`;
     } else if (w < CURRENT_WK - 1) {
       hmotwBadge = `<span class="wk-badge pending-lock">🔓 Pending Lock</span>`;
     } else {
