@@ -3074,6 +3074,19 @@ function renderDDB() {
       }
     });
   });
+  // Entry 339 (Hanh's ask, 2026-10-13): the right-hand name labels now sit
+  // next to each manager's CURRENT dot (latest played week) instead of at the
+  // far-right edge, and advance one week to the right every time a new week
+  // is played. Drawn inside the SVG (same visual rows as the dots) so they
+  // can't drift from them. Spotlight click wired below like the edge labels.
+  if (LIVE_WK > 0) {
+    const curX = xOf(LIVE_WK-1) + 10;
+    MANAGERS.forEach((m,mi)=>{
+      const row = visualRow[mi][LIVE_WK-1];
+      if (row == null) return;
+      out += `<text class="ddb-lbl-svg" data-name="${m.name}" x="${curX}" y="${yOf(row)}" dominant-baseline="central" font-size="12" font-weight="600" fill="${m.color}" opacity="${spotOpacity(m.name,1)}" style="cursor:pointer;" font-family="Segoe UI,sans-serif">${m.name}</text>`;
+    });
+  }
   svg.innerHTML=out;
 
   // Left/right edge labels — same visual-row placement as the lines above,
@@ -3081,7 +3094,7 @@ function renderDDB() {
   const startOrder=[...MANAGERS].map((m,i)=>({m,row:visualRow[i][0]})).sort((a,b)=>a.row-b.row);
   const endOrder=[...MANAGERS].map((m,i)=>({m,row:visualRow[i][LIVE_WK-1]})).sort((a,b)=>a.row-b.row);
   left.innerHTML=startOrder.map(({m,row})=>`<div class="ddb-lbl L" data-name="${m.name}" style="top:${yOf(row)}px;color:${m.color};opacity:${spotOpacity(m.name,1)};cursor:pointer;">${m.name}</div>`).join('');
-  right.innerHTML=endOrder.map(({m,row})=>`<div class="ddb-lbl R" data-name="${m.name}" style="top:${yOf(row)}px;color:${m.color};opacity:${spotOpacity(m.name,1)};cursor:pointer;">${m.name}</div>`).join('');
+  right.innerHTML=''; // Entry 339: right-side names now drawn in the SVG beside the current dots
 
   // Spotlight (Entry 232): click a dot or an edge name label to spotlight
   // that manager across all four Standings-tab charts; click empty SVG
@@ -3090,8 +3103,8 @@ function renderDDB() {
   svg.querySelectorAll('.ddb-dot').forEach(el => {
     el.addEventListener('click', e => { e.stopPropagation(); setSpotlight(el.dataset.name); });
   });
-  [...left.querySelectorAll('.ddb-lbl'), ...right.querySelectorAll('.ddb-lbl')].forEach(el => {
-    el.addEventListener('click', () => setSpotlight(el.dataset.name));
+  [...left.querySelectorAll('.ddb-lbl'), ...svg.querySelectorAll('.ddb-lbl-svg')].forEach(el => {
+    el.addEventListener('click', e => { e.stopPropagation(); setSpotlight(el.dataset.name); });
   });
 
   // Tooltip
