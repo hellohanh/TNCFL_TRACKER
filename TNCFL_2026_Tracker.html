@@ -4468,20 +4468,18 @@ function startHMOTWAnim(crownM, displayWk){
   // Entry 341: collision effect odds by number of shapes on screen.
   // [chance an impact triggers burst+word, ...]; fewer shapes => more often.
   const FX_TABLE={2:0.60,3:0.45,4:0.33,5:0.25,6:0.18,7:0.14,8:0.11};
-  const FX_CHANCE=count<2?0:(FX_TABLE[count]||0.08);
+  const FX_CHANCE=1; // Entry 342: impact ring plays on every qualifying hit, any shape count (FX_TABLE kept for reference)
   const FX_WORDS=['BONK!','WHAM!','BAM!','POW!','THWACK!','OOF!','BOOP!','SMACK!','CRASH!'];
   const FX_MIN_SPEED=0.9,FX_PAIR_COOLDOWN=75,FX_MAX_ACTIVE=2;
   const hmPairLast={};let hmFxActive=0;
   function hmPlayImpact(x,y,pairKey){
     if(hmFrame-(hmPairLast[pairKey]||-999)<FX_PAIR_COOLDOWN) return;
     hmPairLast[pairKey]=hmFrame;
-    if(hmFxActive>=FX_MAX_ACTIVE||Math.random()>=FX_CHANCE) return;
+    if(Math.random()>=FX_CHANCE) return;
     const fx=document.getElementById('hmfx');if(!fx) return;
     hmFxActive++;
     const b=document.createElement('div');b.className='hm-burst';b.style.left=x+'px';b.style.top=y+'px';fx.appendChild(b);
-    const w=document.createElement('div');w.className='hm-word';w.textContent=FX_WORDS[Math.floor(Math.random()*FX_WORDS.length)];
-    w.style.left=x+'px';w.style.top=(y-8)+'px';w.style.setProperty('--r',(Math.random()*20-10).toFixed(1)+'deg');fx.appendChild(w);
-    setTimeout(()=>{b.remove();w.remove();hmFxActive=Math.max(0,hmFxActive-1);},950);
+    setTimeout(()=>{b.remove();hmFxActive=Math.max(0,hmFxActive-1);},950);
   }
 
 
