@@ -4446,6 +4446,7 @@ function startHMOTWAnim(crownM, displayWk){
 
   // Init physics per avatar
   const RADIUS=22,RESTITUTION=0.76,FRICTION=0.994;
+  const HM_X_SPEED=0.7;
   const MAX_BOUNCE=H*0.80;
   hmotwAvState=Array.from({length:count},(_,i)=>({size:sizes[i],
     x:count===1?0.5:(0.15 + i*(0.7/Math.max(count-1,1))),
@@ -4568,7 +4569,7 @@ function startHMOTWAnim(crownM, displayWk){
     // Avatars
     const groundY=H*PCY-H*0.04;
     hmotwAvState.forEach((av,i)=>{
-      av.x+=av.vx/W;
+      av.x+=av.vx*HM_X_SPEED/W; // Entry 343: horizontal travel 30% slower
       av.vx+=(av.tvx-av.vx)*0.03;
       if(Math.random()<0.004){av.tvx=(Math.random()<0.5?-1:1)*(0.7+Math.random()*1.4);}
       // Entry 340: random size pulsing
