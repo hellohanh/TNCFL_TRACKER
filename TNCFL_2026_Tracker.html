@@ -403,6 +403,11 @@ table.score th.bye-wk.sortable:hover{background:rgba(100,180,255,0.28);}
 .ddb-lbl.L{right:8px;text-align:right;}
 .ddb-lbl.R{left:8px;text-align:left;}
 .ddb-empty{font-size:12px;color:var(--text3);padding:20px 0;}
+/* Entry 341: High Man collision effects */
+.hm-burst{position:absolute;width:10px;height:10px;margin:-5px 0 0 -5px;border-radius:50%;border:3px solid #ffd54a;box-shadow:0 0 10px #ffb300,inset 0 0 6px #fff3;animation:hmBurst .55s ease-out forwards;pointer-events:none;}
+@keyframes hmBurst{0%{transform:scale(.3);opacity:1}100%{transform:scale(5.5);opacity:0;border-width:1px}}
+.hm-word{position:absolute;transform:translate(-50%,-50%) rotate(var(--r,-8deg));font:900 17px/1 'Impact','Arial Black',sans-serif;letter-spacing:.04em;color:#fff;-webkit-text-stroke:1px #c62828;text-shadow:2px 2px 0 #c62828,-1px -1px 0 #ffd54a;white-space:nowrap;animation:hmWord .9s ease-out forwards;pointer-events:none;}
+@keyframes hmWord{0%{transform:translate(-50%,-30%) rotate(var(--r,-8deg)) scale(.3);opacity:0}15%{transform:translate(-50%,-60%) rotate(var(--r,-8deg)) scale(1.35);opacity:1}70%{opacity:1}100%{transform:translate(-50%,-140%) rotate(var(--r,-8deg)) scale(1);opacity:0}}
 
 /* ── DESPAIR DIFFERENTIAL ── */
 .despair-card2{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 16px;flex:1;}
@@ -4369,6 +4374,7 @@ function startHMOTWAnim(crownM, displayWk){
       '<canvas id="hmpc" style="position:absolute;inset:0;pointer-events:none;"></canvas>'+
       
       avatarHTML+
+      '<div id="hmfx" style="position:absolute;inset:0;pointer-events:none;overflow:hidden;z-index:6;"></div>'+
     '</div>';
 
   const hmstage=document.getElementById('hmstage');
@@ -4451,8 +4457,32 @@ function startHMOTWAnim(crownM, displayWk){
     // Entry 340: random grow/shrink. baseSize = the layout size; scale eases
     // toward a random target (65%-150%) that is re-picked every 1-3 s; `size`
     // (used by collisions/walls) follows baseSize*scale.
-    baseSize:sizes[i],scale:1,targetScale:0.65+Math.random()*0.85,scaleTimer:Math.floor(60+Math.random()*120)
+    tvx:0,baseSize:sizes[i],scale:1,targetScale:0.65+Math.random()*0.85,scaleTimer:Math.floor(60+Math.random()*120)
   }));
+  // Entry 341: horizontal cruising. Friction used to bleed every shape's vx to ~0
+  // within a couple of seconds, so shapes sat in their lane. Each shape now has a
+  // cruise velocity (tvx) its vx eases back toward; it re-picks direction/speed at
+  // random, flips at walls, and follows the bounce direction after collisions.
+  hmotwAvState.forEach(a=>{ a.tvx=a.vx; a.h=0; });
+
+  // Entry 341: collision effect odds by number of shapes on screen.
+  // [chance an impact triggers burst+word, ...]; fewer shapes => more often.
+  const FX_TABLE={2:0.60,3:0.45,4:0.33,5:0.25,6:0.18,7:0.14,8:0.11};
+  const FX_CHANCE=count<2?0:(FX_TABLE[count]||0.08);
+  const FX_WORDS=['BONK!','WHAM!','BAM!','POW!','THWACK!','OOF!','BOOP!','SMACK!','CRASH!'];
+  const FX_MIN_SPEED=0.9,FX_PAIR_COOLDOWN=75,FX_MAX_ACTIVE=2;
+  const hmPairLast={};let hmFxActive=0;
+  function hmPlayImpact(x,y,pairKey){
+    if(hmFrame-(hmPairLast[pairKey]||-999)<FX_PAIR_COOLDOWN) return;
+    hmPairLast[pairKey]=hmFrame;
+    if(hmFxActive>=FX_MAX_ACTIVE||Math.random()>=FX_CHANCE) return;
+    const fx=document.getElementById('hmfx');if(!fx) return;
+    hmFxActive++;
+    const b=document.createElement('div');b.className='hm-burst';b.style.left=x+'px';b.style.top=y+'px';fx.appendChild(b);
+    const w=document.createElement('div');w.className='hm-word';w.textContent=FX_WORDS[Math.floor(Math.random()*FX_WORDS.length)];
+    w.style.left=x+'px';w.style.top=(y-8)+'px';w.style.setProperty('--r',(Math.random()*20-10).toFixed(1)+'deg');fx.appendChild(w);
+    setTimeout(()=>{b.remove();w.remove();hmFxActive=Math.max(0,hmFxActive-1);},950);
+  }
 
 
 
@@ -4472,16 +4502,25 @@ function startHMOTWAnim(crownM, displayWk){
         // Use average radius of the two shapes for collision distance
         const rA=(a.size||46)/2, rB=(b.size||36)/2;
         const minD=rA+rB;
-        const ax=a.x*W,bx2=b.x*W,dist=Math.abs(ax-bx2);
-        if(dist<minD){
+        const ax=a.x*W,bx2=b.x*W,dx=Math.abs(ax-bx2);
+        // Entry 341: true 2D test using each shape's current height, so shapes
+        // at different altitudes pass over/under each other and mid-air hits count.
+        const dyh=(a.h||0)-(b.h||0);
+        const dist=Math.sqrt(dx*dx+dyh*dyh);
+        if(dist<minD*0.95){
           const nx=ax<bx2?-1:1,dvx=a.vx-b.vx,dot=dvx*(-nx);
           if(dot<0)continue;
           // Mass proportional to size² for realistic physics
           const mA=rA*rA,mB=rB*rB,mT=mA+mB;
           const impulse=2*dot/(mT);
           a.vx+=impulse*mB*nx;b.vx-=impulse*mA*nx;
-          const ov=(minD-dist)/2;
+          a.tvx=(a.vx>=0?1:-1)*Math.abs(a.tvx);b.tvx=(b.vx>=0?1:-1)*Math.abs(b.tvx); // keep cruising the way the bump sent them
+          const ov=Math.max(1,(minD-dx)/2);
           a.x-=(ov*nx*(mB/mT))/W;b.x+=(ov*nx*(mA/mT))/W;
+          if(Math.abs(dvx)>=FX_MIN_SPEED||Math.abs(a.vx-b.vx)>=FX_MIN_SPEED){
+            const gY=H*PCY-H*0.04;
+            hmPlayImpact((ax+bx2)/2,gY-(Math.max(a.h,b.h)||0)-Math.min(a.size,b.size)*0.6,i+'_'+j);
+          }
           a.rotVel+=nx*10*(0.5+Math.random());b.rotVel-=nx*10*(0.5+Math.random());
           const cy=H*PCY;
           addHMBounceRipples(ax,cy);addHMBounceRipples(bx2,cy);
@@ -4531,7 +4570,9 @@ function startHMOTWAnim(crownM, displayWk){
     // Avatars
     const groundY=H*PCY-H*0.04;
     hmotwAvState.forEach((av,i)=>{
-      av.x+=av.vx/W;av.vx*=FRICTION;
+      av.x+=av.vx/W;
+      av.vx+=(av.tvx-av.vx)*0.03;
+      if(Math.random()<0.004){av.tvx=(Math.random()<0.5?-1:1)*(0.7+Math.random()*1.4);}
       // Entry 340: random size pulsing
       av.scaleTimer--;
       if(av.scaleTimer<=0){av.targetScale=0.65+Math.random()*0.85;av.scaleTimer=Math.floor(60+Math.random()*120);}
@@ -4539,13 +4580,14 @@ function startHMOTWAnim(crownM, displayWk){
       av.size=av.baseSize*av.scale;
       const halfW=av.size/2;
       const minX=(halfW+4)/W,maxX=(W-halfW-4)/W;
-      if(av.x<minX){av.x=minX;av.vx=Math.abs(av.vx)*RESTITUTION;av.rotVel+=3;}
-      if(av.x>maxX){av.x=maxX;av.vx=-Math.abs(av.vx)*RESTITUTION;av.rotVel-=3;}
+      if(av.x<minX){av.x=minX;av.vx=Math.abs(av.vx)*RESTITUTION;av.tvx=Math.abs(av.tvx);av.rotVel+=3;}
+      if(av.x>maxX){av.x=maxX;av.vx=-Math.abs(av.vx)*RESTITUTION;av.tvx=-Math.abs(av.tvx);av.rotVel-=3;}
       if(Math.random()<0.01)av.vx+=(Math.random()-0.5)*0.7;
       if(Math.random()<0.005)av.targetRotVel=(Math.random()-0.5)*4;
       av.rotVel+=(av.targetRotVel-av.rotVel)*0.02;av.rotVel*=0.97;av.rot=(av.rot+av.rotVel)%360;
       av.t+=av.speed;
       const sinVal=Math.sin(av.t),yOff=-Math.max(0,sinVal)*av.bounceH;
+      av.h=-yOff; // height above the ground, used for mid-air collisions
       const atBottom=sinVal<=0.08&&sinVal>=-0.25;
       const elW=av.baseSize,elH=av.baseSize+18; // layout uses the unscaled size; scale is applied by transform below
       const px=W*av.x-elW/2,py=groundY-elH+8+yOff;
