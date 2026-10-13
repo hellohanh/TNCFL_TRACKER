@@ -5968,7 +5968,7 @@ async function loadQbDepthChart(isManualRefresh) {
     const resp = await fetch(`${WORKER_URL}/qb-depth-chart/${week}${forceParam}`);
     if (!resp.ok) throw new Error('Worker qb-depth-chart fetch not ok (' + resp.status + ')');
     const data = await resp.json();
-    if (!data.live) throw new Error(data.error || 'Worker could not build the QB depth chart');
+    if (!data.live) { if (data.diag) console.warn('[QB Depth Chart] diagnostics:', JSON.stringify(data.diag)); throw new Error(data.error || 'Worker could not build the QB depth chart'); }
     QB_DEPTH_DATA = data;
     QB_DEPTH_LOADED = true;
     QB_DEPTH_SORT = { col: 'manager', dir: 'asc' };
