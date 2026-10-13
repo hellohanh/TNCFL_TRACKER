@@ -5969,6 +5969,14 @@ async function loadQbDepthChart(isManualRefresh) {
     if (!resp.ok) throw new Error('Worker qb-depth-chart fetch not ok (' + resp.status + ')');
     const data = await resp.json();
     if (!data.live) { if (data.diag) console.warn('[QB Depth Chart] diagnostics:', JSON.stringify(data.diag)); throw new Error(data.error || 'Worker could not build the QB depth chart'); }
+    // Entry 349: worker was refused by ESPN's depth-chart host (403 from Cloudflare) —
+    // fetch the 32 depth charts straight from the browser and build the rows here.
+    if (data.clientDepth) {
+      statusEl.textContent = 'Loading depth charts from ESPN…';
+      data.rows = await qbDepthBuildRowsInBrowser(data.clientDepth);
+      if (!data.rows.length) throw new Error('ESPN depth charts unreachable from the browser too');
+      data.stale = false;
+    }
     QB_DEPTH_DATA = data;
     QB_DEPTH_LOADED = true;
     QB_DEPTH_SORT = { col: 'manager', dir: 'asc' };
@@ -5987,6 +5995,42 @@ async function loadQbDepthChart(isManualRefresh) {
   } finally {
     if (btn && isManualRefresh) btn.style.opacity = 0.6;
   }
+}
+
+// Entry 349: browser-side depth-chart fetch + same row-building rules as the Worker's
+// computeQbDepthChart (rostered QB at any depth; free-agent QB only at QB1/QB2).
+async function qbDepthBuildRowsInBrowser(cd) {
+  const results = await Promise.all(cd.teams.map(async t => {
+    try {
+      const url = `https://sports.core.api.espn.com/v2/sports/football/leagues/nfl/seasons/${cd.season}/teams/${t.id}/depthcharts?lang=en&region=us`;
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('status ' + resp.status);
+      const d = await resp.json();
+      for (const item of (d.items || [])) {
+        const g = item.positions && item.positions.qb;
+        if (g && Array.isArray(g.athletes) && g.athletes.length) {
+          return g.athletes.map(a => {
+            const m = ((a.athlete && a.athlete.$ref) || '').match(/athletes\/(\d+)/);
+            return { rank: a.rank, athleteId: m ? m[1] : null };
+          }).filter(a => a.athleteId).sort((a, b) => a.rank - b.rank);
+        }
+      }
+      return [];
+    } catch (e) { console.warn('[QB Depth Chart] browser depth fetch failed for', t.abbr, e.message); return []; }
+  }));
+  const rows = [];
+  cd.teams.forEach((t, i) => {
+    results[i].forEach(({ rank, athleteId }) => {
+      const owned = cd.rosterMap[athleteId];
+      const fa = !owned ? cd.faMap[athleteId] : null;
+      const src = owned || fa;
+      if (!src) return;
+      const isFreeAgent = !owned;
+      if (isFreeAgent && rank > 2) return;
+      rows.push({ managerId: owned ? owned.managerId : null, isFreeAgent, team: t.abbr, name: src.name, proj: src.proj, depth: rank, status: src.status || null });
+    });
+  });
+  return rows;
 }
 
 function qbDepthColValue(row, col) {
