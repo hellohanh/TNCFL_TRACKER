@@ -5977,6 +5977,7 @@ async function loadQbDepthChart(isManualRefresh) {
       if (!data.rows.length) throw new Error('ESPN depth charts unreachable from the browser too');
       data.stale = false;
     }
+    if (!(data.rows || []).length) throw new Error('Worker returned zero QB rows (worker.js may not be the latest deploy)');
     QB_DEPTH_DATA = data;
     QB_DEPTH_LOADED = true;
     QB_DEPTH_SORT = { col: 'manager', dir: 'asc' };
