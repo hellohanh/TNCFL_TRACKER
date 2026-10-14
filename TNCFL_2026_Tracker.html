@@ -8622,7 +8622,10 @@ async function copyRecapPacket(){
 // in a small box (bottom-right) with a Copy button, so "it's slow" can be pinned to a function.
 (function(){
   if (!/[?&]perf=1/.test(location.search)) return;
-  const log = [], t0 = performance.now();
+  const log = [], t0 = performance.now(), pending = new Set();
+  let hw = 'n/a';
+  try { const gl = document.createElement('canvas').getContext('webgl'); const x = gl && gl.getExtension('WEBGL_debug_renderer_info');
+        hw = 'cores=' + navigator.hardwareConcurrency + ' mem=' + (navigator.deviceMemory || '?') + 'GB gpu=' + (x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : 'unknown') + ' dpr=' + devicePixelRatio + ' screen=' + screen.width + 'x' + screen.height; } catch(e){}
   const rec = (name, ms, kind) => { log.push({ name, ms: Math.round(ms), at: Math.round(performance.now() - t0), kind }); };
   ['fetchESPNData','renderAll','showTab','renderStandings','renderScoreGraph','renderHMOTW','renderPeak','renderMoney','renderPlayoffs',
    'renderSeasonBump','renderDDB','renderDespair2','renderSpread2','renderPBMC','renderFAABChart','renderTransactions','renderMovement',
@@ -8630,8 +8633,9 @@ async function copyRecapPacket(){
    .forEach(n => {
      const f = window[n]; if (typeof f !== 'function') return;
      window[n] = function(){
-       const s = performance.now(); const r = f.apply(this, arguments);
-       if (r && typeof r.then === 'function') return r.then(v => { rec(n + ' (async total)', performance.now() - s, 'fn'); return v; });
+       const s = performance.now(); pending.add(n); const r = f.apply(this, arguments);
+       if (r && typeof r.then === 'function') return r.then(v => { pending.delete(n); rec(n + ' (async total)', performance.now() - s, 'fn'); return v; }, e => { pending.delete(n); throw e; });
+       pending.delete(n);
        rec(n, performance.now() - s, 'fn'); return r;
      };
    });
@@ -8644,9 +8648,14 @@ async function copyRecapPacket(){
   const box = document.createElement('div');
   box.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:100000;width:420px;max-height:50vh;overflow:auto;background:#000d;color:#9f9;font:11px/1.35 monospace;padding:8px;border:1px solid #3a3;border-radius:6px;user-select:text;';
   const render = () => {
-    const top = [...log].sort((a,b)=>b.ms-a.ms).slice(0,18);
+    const by = k => [...log].filter(e => e.kind === k).sort((a,b)=>b.ms-a.ms);
+    const fmt = e => e.ms + ' ms @' + e.at + 'ms  ' + e.name;
     box.innerHTML = '<b>PERF (?perf=1)</b> &nbsp;<button id="perf-copy">Copy</button> &nbsp;frames>50ms: ' + slow + '/' + fr + '<br>' +
-      top.map(e => e.ms + ' ms &nbsp;@' + e.at + 'ms &nbsp;' + e.name).join('<br>');
+      'MACHINE: ' + hw + '<br>' +
+      '<b>FUNCTIONS (slowest 14)</b><br>' + by('fn').slice(0,14).map(fmt).join('<br>') + '<br>' +
+      '<b>FREEZES (page frozen)</b><br>' + by('long').slice(0,8).map(fmt).join('<br>') + '<br>' +
+      '<b>NETWORK (slowest 6)</b><br>' + by('net').slice(0,6).map(fmt).join('<br>') + '<br>' +
+      '<b>STILL RUNNING</b>: ' + (pending.size ? [...pending].join(', ') : 'nothing');
     const b = box.querySelector('#perf-copy'); if (b) b.onclick = () => navigator.clipboard && navigator.clipboard.writeText(box.innerText);
   };
   document.addEventListener('DOMContentLoaded', () => { document.body.appendChild(box); setInterval(render, 2000); });
