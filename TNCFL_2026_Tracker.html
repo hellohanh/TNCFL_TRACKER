@@ -8646,18 +8646,25 @@ async function copyRecapPacket(){
   try { const gl = document.createElement('canvas').getContext('webgl'); const x = gl && gl.getExtension('WEBGL_debug_renderer_info');
         hw = 'cores=' + navigator.hardwareConcurrency + ' mem=' + (navigator.deviceMemory || '?') + 'GB gpu=' + (x ? gl.getParameter(x.UNMASKED_RENDERER_WEBGL) : 'unknown') + ' dpr=' + devicePixelRatio + ' screen=' + screen.width + 'x' + screen.height; } catch(e){}
   const rec = (name, ms, kind) => { log.push({ name, ms: Math.round(ms), at: Math.round(performance.now() - t0), kind }); };
-  ['fetchESPNData','renderAll','showTab','renderStandings','renderScoreGraph','renderHMOTW','renderPeak','renderMoney','renderPlayoffs',
-   'renderSeasonBump','renderDDB','renderDespair2','renderSpread2','renderPBMC','renderFAABChart','renderTransactions','renderMovement',
-   'renderRecap','renderDraft','renderMoneyCircle','refreshLiveMovementSnapshot','loadQbDepthChart','loadPickemData','loadPickemTable']
-   .forEach(n => {
-     const f = window[n]; if (typeof f !== 'function') return;
-     window[n] = function(){
-       const s = performance.now(); pending.add(n); const r = f.apply(this, arguments);
-       if (r && typeof r.then === 'function') return r.then(v => { pending.delete(n); rec(n + ' (async total)', performance.now() - s, 'fn'); return v; }, e => { pending.delete(n); throw e; });
-       pending.delete(n);
-       rec(n, performance.now() - s, 'fn'); return r;
-     };
-   });
+  // Entry 353: wrap EVERY page-level function (not just the render ones), aggregate calls/total/max per name.
+  const agg = {};
+  const addAgg = (n, ms) => { const a = agg[n] || (agg[n] = { n: 0, total: 0, max: 0 }); a.n++; a.total += ms; if (ms > a.max) a.max = ms; };
+  Object.getOwnPropertyNames(window).forEach(n => {
+    let f; try { f = window[n]; } catch (e) { return; }
+    if (typeof f !== 'function' || /\[native code\]/.test(Function.prototype.toString.call(f)) || /^class\b/.test(Function.prototype.toString.call(f))) return;
+    if (/^[A-Z]/.test(n) || n === 'tick') return;               // constructors / classes
+    const d = Object.getOwnPropertyDescriptor(window, n); if (!d || !d.writable) return;
+    window[n] = function(){
+      if (new.target) return Reflect.construct(f, arguments, new.target);
+      const s = performance.now(); const r = f.apply(this, arguments);
+      if (r && typeof r.then === 'function') { pending.add(n); return r.then(v => { pending.delete(n); rec(n + ' (async total)', performance.now() - s, 'async'); return v; }, e => { pending.delete(n); throw e; }); }
+      addAgg(n, performance.now() - s); return r;
+    };
+  });
+  // Time reading+parsing every response body (the part fetch() timing misses — where freezes hide)
+  const oj = Response.prototype.json;
+  Response.prototype.json = function(){ const s = performance.now(), u = String(this.url).replace(/^https?:\/\//,'').slice(0,60); const self = this;
+    return oj.apply(this, arguments).then(v => { rec('JSON ' + u + (self.headers.get('content-length') ? ' (' + Math.round(self.headers.get('content-length')/1024) + ' KB)' : ''), performance.now() - s, 'json'); return v; }); };
   const of = window.fetch.bind(window);
   window.fetch = function(u){ const s = performance.now(); const url = String(u && u.url || u).replace(/^https?:\/\//,'').slice(0,70);
     return of.apply(this, arguments).then(r => { rec('NET ' + url, performance.now() - s, 'net'); return r; }); };
@@ -8671,7 +8678,9 @@ async function copyRecapPacket(){
     const fmt = e => e.ms + ' ms @' + e.at + 'ms  ' + e.name;
     box.innerHTML = '<b>PERF (?perf=1)</b> &nbsp;<button id="perf-copy">Copy</button> &nbsp;frames>50ms: ' + slow + '/' + fr + '<br>' +
       'MACHINE: ' + hw + '<br>' +
-      '<b>FUNCTIONS (slowest 14)</b><br>' + by('fn').slice(0,14).map(fmt).join('<br>') + '<br>' +
+      '<b>FUNCTIONS by total time (calls / max)</b><br>' + Object.entries(agg).sort((a,b)=>b[1].total-a[1].total).slice(0,14).map(([n,a]) => Math.round(a.total) + ' ms  x' + a.n + '  max ' + Math.round(a.max) + '  ' + n).join('<br>') + '<br>' +
+      '<b>ASYNC FUNCTIONS (total incl. waiting)</b><br>' + by('async').slice(0,6).map(fmt).join('<br>') + '<br>' +
+      '<b>READING/PARSING RESPONSES (slowest 8)</b><br>' + by('json').slice(0,8).map(fmt).join('<br>') + '<br>' +
       '<b>FREEZES (page frozen)</b><br>' + by('long').slice(0,8).map(fmt).join('<br>') + '<br>' +
       '<b>NETWORK (slowest 6)</b><br>' + by('net').slice(0,6).map(fmt).join('<br>') + '<br>' +
       '<b>STILL RUNNING</b>: ' + (pending.size ? [...pending].join(', ') : 'nothing');
