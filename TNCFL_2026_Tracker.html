@@ -1614,6 +1614,16 @@ async function fetchESPNData() {
     // three sequential round trips onto the load. It is awaited once, later,
     // where EARLIEST_KICKOFF_THIS_WK is first needed. Never rejects (all
     // failures are caught and logged) — fails soft exactly like before.
+    // Entry 352: the per-week /snapshots/N fetches only need CURRENT_WK, but used to start at the very
+    // END of the load chain (after rosters + transactions). Started here instead, they overlap with
+    // everything below and are awaited where the old code fetched them.
+    const snapFetchPromise = Promise.all(
+      Array.from({ length: CURRENT_WK }, (_, i) => i + 1).map(w =>
+        fetch(`${WORKER_URL}/snapshots/${w}`)
+          .then(async r => ({ w, ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+          .catch(e => ({ w, ok: false, _err: e }))
+      )
+    );
     const nflWeek = Math.max(CURRENT_WK, 1);
     const scheduleSyncPromise = (async () => {
       try {
@@ -1837,8 +1847,22 @@ async function fetchESPNData() {
     // just right now. A name/team/position doesn't change week to week, so
     // last-write-wins on overlap is harmless.
     PLAYER_NAME_MAP = {};
+    // Entry 352: the old code downloaded mRoster (huge: every player's season stats) for EVERY week
+    // 1..CURRENT_WK on every load, and parsing those multi-MB responses froze the page for seconds
+    // (growing each week). Player id -> name/team/position never changes, so the map is cached in
+    // localStorage; with a cache only the CURRENT week's roster is fetched (new players), and any id
+    // still missing is resolved by the existing player-pool fallback below. No cache (first visit,
+    // cleared data, private window) = the original full per-week fetch.
+    const NAME_CACHE_KEY = 'tncfl_player_names_v1';
+    let nameCacheHit = false;
     try {
-      const rosterWeeks = Array.from({length: Math.max(1, CURRENT_WK || 1)}, (_, i) => i + 1);
+      const c = JSON.parse(localStorage.getItem(NAME_CACHE_KEY) || 'null');
+      if (c && c.season === CFG.SEASON && c.map && Object.keys(c.map).length > 50) { Object.assign(PLAYER_NAME_MAP, c.map); nameCacheHit = true; }
+    } catch (cacheErr) { /* storage blocked/corrupt — behave as if no cache */ }
+    try {
+      const rosterWeeks = nameCacheHit
+        ? [Math.max(1, CURRENT_WK || 1)]
+        : Array.from({length: Math.max(1, CURRENT_WK || 1)}, (_, i) => i + 1);
       const rosterResps = await Promise.all(
         rosterWeeks.map(w => espnFetch(CFG.espnUrl('mRoster', w)).catch(e => ({ ok: false, _err: e })))
       );
@@ -1867,7 +1891,8 @@ async function fetchESPNData() {
           });
         });
       });
-      console.info('[FA Activity] Resolved ' + Object.keys(PLAYER_NAME_MAP).length + ' player names from mRoster (weeks 1-' + (CURRENT_WK || 1) + ').');
+      console.info('[FA Activity] Resolved ' + Object.keys(PLAYER_NAME_MAP).length + ' player names from mRoster (' + (nameCacheHit ? 'cache + current week' : 'weeks 1-' + (CURRENT_WK || 1)) + ').');
+      try { localStorage.setItem(NAME_CACHE_KEY, JSON.stringify({ season: CFG.SEASON, map: PLAYER_NAME_MAP })); } catch (saveErr) { /* quota/blocked — fine */ }
     } catch (rosterErr) {
       console.warn('[FA Activity] mRoster fetch/parse failed — player names will show as "Player #id".', rosterErr);
     }
@@ -2198,13 +2223,7 @@ async function fetchESPNData() {
       // parallel via Promise.all instead, matching the mRoster/mTransactions2
       // batches elsewhere in this function — writes still land at the
       // explicit `w - 1` index, so completion order doesn't matter.
-      const snapResults = await Promise.all(
-        Array.from({ length: CURRENT_WK }, (_, i) => i + 1).map(w =>
-          fetch(`${WORKER_URL}/snapshots/${w}`)
-            .then(async r => ({ w, ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
-            .catch(e => ({ w, ok: false, _err: e }))
-        )
-      );
+      const snapResults = await snapFetchPromise; // Entry 352: started earlier, see snapFetchPromise
       snapResults.forEach(({ w, ok, status, data: snapData, _err }) => {
         if (!ok) {
           if (_err) console.warn('[Weekly Movement] snapshot fetch/parse failed for week ' + w, _err);
