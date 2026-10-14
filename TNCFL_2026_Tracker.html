@@ -8681,7 +8681,7 @@ async function copyRecapPacket(){
   });
   // Time reading+parsing every response body (the part fetch() timing misses — where freezes hide)
   const oj = Response.prototype.json;
-  Response.prototype.json = function(){ const s = performance.now(), u = String(this.url).replace(/^https?:\/\//,'').slice(0,60); const self = this;
+  Response.prototype.json = function(){ const s = performance.now(), u = (x => x.length > 100 ? x.slice(0,55) + '…' + x.slice(-45) : x)(String(this.url).replace(/^https?:\/\//,'')); const self = this;
     return oj.apply(this, arguments).then(v => { rec('JSON ' + u + (self.headers.get('content-length') ? ' (' + Math.round(self.headers.get('content-length')/1024) + ' KB)' : ''), performance.now() - s, 'json'); return v; }); };
   const of = window.fetch.bind(window);
   window.fetch = function(u){ const s = performance.now(); const url = String(u && u.url || u).replace(/^https?:\/\//,'').slice(0,70);
