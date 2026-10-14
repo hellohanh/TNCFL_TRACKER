@@ -4369,7 +4369,7 @@ function startHMOTWAnim(crownM, displayWk){
     const showCrown = isSeasonChamp(crownM.name);
     const crownHTML = showCrown ? '<span class="hmcrown" id="hmcrown'+i+'" style="font-size:14px;line-height:1;display:block;text-align:center;">👑</span>' : '<span style="display:block;height:18px;"></span>';
     avatarHTML+=
-      '<div class="hmav" id="hmav'+i+'" style="position:absolute;display:flex;flex-direction:column;align-items:center;gap:0;pointer-events:none;">'+
+      '<div class="hmav" id="hmav'+i+'" style="position:absolute;left:0;top:0;will-change:transform;display:flex;flex-direction:column;align-items:center;gap:0;pointer-events:none;">'+
         crownHTML+
         '<div style="position:relative;width:'+sz+'px;height:'+sz+'px;display:flex;align-items:center;justify-content:center;" id="hminner'+i+'">'+
           '<svg id="hmshape'+i+'" style="position:absolute;top:0;left:0;width:100%;height:100%;transform-origin:center center;" viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg">'+shpSVG+'</svg>'+
@@ -4459,6 +4459,11 @@ function startHMOTWAnim(crownM, displayWk){
     ctx.fillStyle=inner;ctx.fill();
     ctx.strokeStyle='rgba(110,190,255,0.55)';ctx.lineWidth=1.8;ctx.stroke();
   }
+
+  // Entry 354: the puddle never changes, so it is drawn ONCE into an offscreen canvas and copied each frame
+  // (it used to rebuild a 14-point bezier + radial gradient + stroke every frame).
+  const hmPuddleCache=document.createElement('canvas');hmPuddleCache.width=W;hmPuddleCache.height=H;
+  drawHMPuddle(hmPuddleCache.getContext('2d'));
 
   // Init face state per avatar — FKEYS = letter + all pool faces
   const FKEYS=['letter',...HMOTW_FACE_KEYS];
@@ -4601,10 +4606,13 @@ function startHMOTWAnim(crownM, displayWk){
 
     // Rain
     rCtxL.clearRect(0,0,W,H);
-    hmDrops.forEach(d=>{rCtxL.beginPath();rCtxL.strokeStyle='rgba(160,215,255,'+d.op+')';rCtxL.lineWidth=0.6;rCtxL.moveTo(d.x,d.y);rCtxL.lineTo(d.x+1.2,d.y+d.len);rCtxL.stroke();d.y+=d.speed;if(d.y>H){d.y=-d.len;d.x=Math.random()*W;}});
+    // Entry 354: 4 opacity buckets, one stroke() each (was 50 separate begin/stroke calls per frame)
+    for(let bk=0;bk<4;bk++){rCtxL.beginPath();rCtxL.strokeStyle='rgba(160,215,255,'+(0.17+bk*0.09).toFixed(2)+')';rCtxL.lineWidth=0.6;
+      hmDrops.forEach(d=>{if(Math.min(3,Math.floor((d.op-0.12)/0.075))===bk){rCtxL.moveTo(d.x,d.y);rCtxL.lineTo(d.x+1.2,d.y+d.len);}});rCtxL.stroke();}
+    hmDrops.forEach(d=>{d.y+=d.speed;if(d.y>H){d.y=-d.len;d.x=Math.random()*W;}});
 
     // Puddle
-    pCtxL.clearRect(0,0,W,H);drawHMPuddle(pCtxL);
+    pCtxL.clearRect(0,0,W,H);pCtxL.drawImage(hmPuddleCache,0,0);
     hmRainTimer++;if(hmRainTimer>55){hmRainTimer=0;hmotwRipples.push({cx:W*PCX+(Math.random()-0.5)*W*0.22,cy:H*PCY+(Math.random()-0.5)*H*0.03,rx:4+Math.random()*8,ry:2+Math.random()*3,t:0,maxT:60,op:0.4});}
     for(let i=hmotwRipples.length-1;i>=0;i--){const r=hmotwRipples[i];if(r.t<0){r.t++;continue;}const prog=r.t/r.maxT,op=r.op*(1-prog);pCtxL.beginPath();pCtxL.ellipse(r.cx,r.cy,r.rx*(1+prog*2.5),r.ry*(1+prog*2.5),0,0,Math.PI*2);pCtxL.strokeStyle='rgba(120,200,255,'+op+')';pCtxL.lineWidth=1;pCtxL.stroke();r.t++;if(r.t>=r.maxT)hmotwRipples.splice(i,1);}
     for(let i=hmotwDroplets.length-1;i>=0;i--){const d=hmotwDroplets[i];d.x+=d.vx;d.y+=d.vy;d.vy+=0.1;d.op-=0.02;pCtxL.beginPath();pCtxL.arc(d.x,d.y,d.r,0,Math.PI*2);pCtxL.fillStyle='rgba(120,200,255,'+Math.max(0,d.op)+')';pCtxL.fill();if(d.op<=0)hmotwDroplets.splice(i,1);}
@@ -4636,7 +4644,8 @@ function startHMOTWAnim(crownM, displayWk){
       const avEl=document.getElementById('hmav'+i);
       const shapeEl=document.getElementById('hmshape'+i);
       const innerEl=document.getElementById('hminner'+i);
-      if(avEl){avEl.style.left=px+'px';avEl.style.top=py+'px';avEl.style.transformOrigin='50% 100%';avEl.style.transform='scale('+av.scale.toFixed(3)+')';}
+      if(avEl){ // Entry 354: one compositor-only transform (no left/top => no layout every frame)
+        avEl.style.transformOrigin='50% 100%';avEl.style.transform='translate('+px.toFixed(1)+'px,'+py.toFixed(1)+'px) scale('+av.scale.toFixed(3)+')';}
       if(shapeEl)shapeEl.style.transform='rotate('+av.rot+'deg)';
       if(innerEl)innerEl.style.transform=atBottom?'scaleX(1.2) scaleY(0.8)':'scaleX(1) scaleY(1)';
       if(atBottom&&!av.lastAtBottom){addHMBounceRipples(W*av.x,H*PCY);addHMDroplets(W*av.x,H*PCY-8);av.rotVel+=(Math.random()-0.5)*1.5;}
