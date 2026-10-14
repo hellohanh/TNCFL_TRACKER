@@ -8617,6 +8617,41 @@ async function copyRecapPacket(){
     document.body.removeChild(ta);
   }
 }
+// ── PERF PROFILER (Entry 351) — only active when the URL has ?perf=1 ─────────────
+// Times the page's big functions, network calls and long main-thread tasks, and shows the slowest
+// in a small box (bottom-right) with a Copy button, so "it's slow" can be pinned to a function.
+(function(){
+  if (!/[?&]perf=1/.test(location.search)) return;
+  const log = [], t0 = performance.now();
+  const rec = (name, ms, kind) => { log.push({ name, ms: Math.round(ms), at: Math.round(performance.now() - t0), kind }); };
+  ['fetchESPNData','renderAll','showTab','renderStandings','renderScoreGraph','renderHMOTW','renderPeak','renderMoney','renderPlayoffs',
+   'renderSeasonBump','renderDDB','renderDespair2','renderSpread2','renderPBMC','renderFAABChart','renderTransactions','renderMovement',
+   'renderRecap','renderDraft','renderMoneyCircle','refreshLiveMovementSnapshot','loadQbDepthChart','loadPickemData','loadPickemTable']
+   .forEach(n => {
+     const f = window[n]; if (typeof f !== 'function') return;
+     window[n] = function(){
+       const s = performance.now(); const r = f.apply(this, arguments);
+       if (r && typeof r.then === 'function') return r.then(v => { rec(n + ' (async total)', performance.now() - s, 'fn'); return v; });
+       rec(n, performance.now() - s, 'fn'); return r;
+     };
+   });
+  const of = window.fetch.bind(window);
+  window.fetch = function(u){ const s = performance.now(); const url = String(u && u.url || u).replace(/^https?:\/\//,'').slice(0,70);
+    return of.apply(this, arguments).then(r => { rec('NET ' + url, performance.now() - s, 'net'); return r; }); };
+  try { new PerformanceObserver(l => l.getEntries().forEach(e => rec('LONG TASK (page frozen)', e.duration, 'long'))).observe({ entryTypes: ['longtask'] }); } catch(e){}
+  let fr = 0, last = performance.now(), slow = 0;
+  (function tick(){ const n = performance.now(); if (n - last > 50) slow++; last = n; fr++; requestAnimationFrame(tick); })();
+  const box = document.createElement('div');
+  box.style.cssText = 'position:fixed;right:8px;bottom:8px;z-index:100000;width:420px;max-height:50vh;overflow:auto;background:#000d;color:#9f9;font:11px/1.35 monospace;padding:8px;border:1px solid #3a3;border-radius:6px;user-select:text;';
+  const render = () => {
+    const top = [...log].sort((a,b)=>b.ms-a.ms).slice(0,18);
+    box.innerHTML = '<b>PERF (?perf=1)</b> &nbsp;<button id="perf-copy">Copy</button> &nbsp;frames>50ms: ' + slow + '/' + fr + '<br>' +
+      top.map(e => e.ms + ' ms &nbsp;@' + e.at + 'ms &nbsp;' + e.name).join('<br>');
+    const b = box.querySelector('#perf-copy'); if (b) b.onclick = () => navigator.clipboard && navigator.clipboard.writeText(box.innerText);
+  };
+  document.addEventListener('DOMContentLoaded', () => { document.body.appendChild(box); setInterval(render, 2000); });
+})();
+
 </script>
 </body>
 </html>
