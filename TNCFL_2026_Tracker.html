@@ -2282,6 +2282,7 @@ const SESSION_DATA = []; // Weekly Movement tab data (entered manually each week
 
 // ── TABS ──────────────────────────────────────────────────────────────────
 function showTab(id) {
+  if (id !== 'hmotw') stopHMOTWAnim(); // Entry 350: High Man animation must not keep running behind other tabs
   ['standings','transactions','movement','hmotw','money','playoffs','recap','draft','pickem'].forEach(t=>{
     document.getElementById('tab-'+t).style.display = t===id?'':'none';
   });
@@ -2887,6 +2888,10 @@ function renderScoreGraph() {
 
   // Wire draggable avg groups
   const svgEl = document.getElementById('sg-svg');
+  // Entry 350: previous render's document-level drag listeners are removed before new ones are added
+  if (window._sgDocAbort) window._sgDocAbort.abort();
+  window._sgDocAbort = new AbortController();
+  const _sgSig = window._sgDocAbort.signal;
   wkAvgs.forEach((avg,w)=>{
     const grp   = document.getElementById(`sg-avg-grp-${w}`);
     const line  = document.getElementById(`sg-avg-line-${w}`);
@@ -2921,7 +2926,7 @@ function renderScoreGraph() {
         delta.setAttribute('fill', d>=0?'#4ec79e':'#e8686d');
       }
       line.setAttribute('opacity','1');
-    });
+    }, {signal:_sgSig});
     document.addEventListener('mouseup', ()=>{
       if(!dragging) return;
       dragging=false;
@@ -2960,7 +2965,7 @@ function renderScoreGraph() {
         }
       };
       requestAnimationFrame(animate);
-    });
+    }, {signal:_sgSig});
   });
 
   // Tooltip on bars
@@ -4301,6 +4306,10 @@ function hmotwNav(dir){
 
 function startHMOTWAnim(crownM, displayWk){
   stopHMOTWAnim();
+  // Entry 350: never start the animation while the High Man tab is hidden (renderHMOTW is also
+  // called by data refreshes); showTab('hmotw') re-renders and starts it when the tab is opened.
+  const _hmTab = document.getElementById('tab-hmotw');
+  if (_hmTab && _hmTab.style.display === 'none') return;
   const card=document.getElementById('crown-card');
   // Count wins and tally (DHMOTW = 2.0) up to and including displayWk
   let wins=0, tally=0;
@@ -4475,6 +4484,7 @@ function startHMOTWAnim(crownM, displayWk){
   const FX_WORDS=['BONK!','WHAM!','BAM!','POW!','THWACK!','OOF!','BOOP!','SMACK!','CRASH!'];
   const FX_MIN_SPEED=0.9,FX_PAIR_COOLDOWN=75,FX_MAX_ACTIVE=2;
   const hmPairLast={};let hmFxActive=0;
+  const hmRipLast={};
   function hmPlayImpact(x,y,pairKey){
     if(hmFrame-(hmPairLast[pairKey]||-999)<FX_PAIR_COOLDOWN) return;
     hmPairLast[pairKey]=hmFrame;
@@ -4491,8 +4501,8 @@ function startHMOTWAnim(crownM, displayWk){
   const hmDrops=Array.from({length:50},()=>({x:Math.random()*W,y:Math.random()*H,len:6+Math.random()*10,speed:5+Math.random()*7,op:0.12+Math.random()*0.3}));
   let hmRainTimer=0,hmFrame=0;
 
-  function addHMBounceRipples(cx,cy){const cnt=3+Math.floor(Math.random()*3);for(let i=0;i<cnt;i++)hmotwRipples.push({cx:cx+(Math.random()-0.5)*16,cy,rx:8+Math.random()*12,ry:3+Math.random()*4,t:-i*7,maxT:75+Math.floor(Math.random()*25),op:0.8-i*0.1});}
-  function addHMDroplets(cx,cy){for(let i=0;i<3+Math.floor(Math.random()*4);i++){const angle=-Math.PI*(0.15+Math.random()*0.7),speed=1.2+Math.random()*2.5;hmotwDroplets.push({x:cx+(Math.random()-0.5)*20,y:cy,vx:Math.cos(angle)*speed*(Math.random()>0.5?1:-1),vy:Math.sin(angle)*speed,r:1+Math.random()*1.8,op:0.9});}}
+  function addHMBounceRipples(cx,cy){if(hmotwRipples.length>60)return;const cnt=3+Math.floor(Math.random()*3);for(let i=0;i<cnt;i++)hmotwRipples.push({cx:cx+(Math.random()-0.5)*16,cy,rx:8+Math.random()*12,ry:3+Math.random()*4,t:-i*7,maxT:75+Math.floor(Math.random()*25),op:0.8-i*0.1});}
+  function addHMDroplets(cx,cy){if(hmotwDroplets.length>90)return;for(let i=0;i<3+Math.floor(Math.random()*4);i++){const angle=-Math.PI*(0.15+Math.random()*0.7),speed=1.2+Math.random()*2.5;hmotwDroplets.push({x:cx+(Math.random()-0.5)*20,y:cy,vx:Math.cos(angle)*speed*(Math.random()>0.5?1:-1),vy:Math.sin(angle)*speed,r:1+Math.random()*1.8,op:0.9});}}
 
   function resolveHMCollision(){
     if(count<2) return;
@@ -4524,8 +4534,12 @@ function startHMOTWAnim(crownM, displayWk){
           }
           a.rotVel+=nx*10*(0.5+Math.random());b.rotVel-=nx*10*(0.5+Math.random());
           const cy=H*PCY;
-          addHMBounceRipples(ax,cy);addHMBounceRipples(bx2,cy);
-          addHMDroplets(ax,cy-8);addHMDroplets(bx2,cy-8);
+          const _rk=i+'_'+j; // Entry 350: ripples/droplets at most once per pair every 20 frames
+          if(hmFrame-(hmRipLast[_rk]||-999)>20){
+            hmRipLast[_rk]=hmFrame;
+            addHMBounceRipples(ax,cy);addHMBounceRipples(bx2,cy);
+            addHMDroplets(ax,cy-8);addHMDroplets(bx2,cy-8);
+          }
 
         }
       }
@@ -8182,7 +8196,9 @@ function renderFAActivity() {
   });
 }
 
-window.addEventListener('resize',()=>{
+let _resizeTimer=null;
+window.addEventListener('resize',()=>{ clearTimeout(_resizeTimer); _resizeTimer=setTimeout(_onResizeRedraw,150); }); // Entry 350: debounced
+function _onResizeRedraw(){
   if(!document.getElementById('tab-hmotw').style.display) renderPeak();
   if(!document.getElementById('tab-standings').style.display){
     renderSeasonBump();
@@ -8190,7 +8206,7 @@ window.addEventListener('resize',()=>{
     renderDespair2();
     renderSpread2();
   }
-});
+}
 
 // ── COMMISSIONER PORTAL ────────────────────────────────────────────────────
 // Entry 137 (2026-09-09): the password used to be a hardcoded constant —
