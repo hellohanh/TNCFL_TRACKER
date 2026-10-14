@@ -1202,6 +1202,11 @@ let WK_TRADES = [];
 let TRANS_BY_MANAGER_WK = {}; // { managerName: { wk: {trans, trades} } } — Entry 270, feeds computeRecapStandings()
 const FAAB_BUDGET = 1000; // starting free-agent acquisition budget per manager (Entry 120, 2026-09-09)
 let FAAB_SPENT = {};      // managerName -> total $ spent on waiver bids this season
+const NAME_CACHE_KEY = 'tncfl_player_names_v1'; // Entry 352/353
+let PLAYER_NAME_UNRESOLVED = new Set(); // ids the player-pool fallback could not resolve — not re-asked every load
+function persistPlayerNameCache() {
+  try { localStorage.setItem(NAME_CACHE_KEY, JSON.stringify({ season: CFG.SEASON, map: PLAYER_NAME_MAP, unresolved: [...PLAYER_NAME_UNRESOLVED] })); } catch (e) { /* quota/blocked — fine */ }
+}
 let PLAYER_NAME_MAP = {}; // playerId -> {name, proTeamId, positionId} (Entry 122/123, resolved via mRoster; ADD-side only, dropped players unresolvable)
 let EARLIEST_KICKOFF_THIS_WK = null; // Date of the current week's first real game kickoff, or null if unknown (Entry 145)
 let WEEK_KICKOFF_TIMES = {}; // {week: kickoffTimestampMs} — full historical record from the Worker (Entry 154), grows permanently over the season
@@ -1853,11 +1858,10 @@ async function fetchESPNData() {
     // localStorage; with a cache only the CURRENT week's roster is fetched (new players), and any id
     // still missing is resolved by the existing player-pool fallback below. No cache (first visit,
     // cleared data, private window) = the original full per-week fetch.
-    const NAME_CACHE_KEY = 'tncfl_player_names_v1';
     let nameCacheHit = false;
     try {
       const c = JSON.parse(localStorage.getItem(NAME_CACHE_KEY) || 'null');
-      if (c && c.season === CFG.SEASON && c.map && Object.keys(c.map).length > 50) { Object.assign(PLAYER_NAME_MAP, c.map); nameCacheHit = true; }
+      if (c && c.season === CFG.SEASON && c.map && Object.keys(c.map).length > 50) { Object.assign(PLAYER_NAME_MAP, c.map); PLAYER_NAME_UNRESOLVED = new Set(c.unresolved || []); nameCacheHit = true; }
     } catch (cacheErr) { /* storage blocked/corrupt — behave as if no cache */ }
     try {
       const rosterWeeks = nameCacheHit
@@ -1892,7 +1896,7 @@ async function fetchESPNData() {
         });
       });
       console.info('[FA Activity] Resolved ' + Object.keys(PLAYER_NAME_MAP).length + ' player names from mRoster (' + (nameCacheHit ? 'cache + current week' : 'weeks 1-' + (CURRENT_WK || 1)) + ').');
-      try { localStorage.setItem(NAME_CACHE_KEY, JSON.stringify({ season: CFG.SEASON, map: PLAYER_NAME_MAP })); } catch (saveErr) { /* quota/blocked — fine */ }
+      persistPlayerNameCache();
     } catch (rosterErr) {
       console.warn('[FA Activity] mRoster fetch/parse failed — player names will show as "Player #id".', rosterErr);
     }
@@ -2023,7 +2027,7 @@ async function fetchESPNData() {
               }
             });
           });
-          const stillMissing = [...neededIds].filter(id => !PLAYER_NAME_MAP[id]);
+          const stillMissing = [...neededIds].filter(id => !PLAYER_NAME_MAP[id] && !PLAYER_NAME_UNRESOLVED.has(id)); // Entry 353: skip ids already known to be unresolvable
           if (stillMissing.length > 0) {
             try {
               const poolUrl = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/players?scoringPeriodId=0&view=kona_player_info`;
@@ -2049,6 +2053,10 @@ async function fetchESPNData() {
                   }
                 });
                 console.info('[FA Activity] Fallback player-pool fetch resolved ' + filled + ' of ' + stillMissing.length + ' still-missing name(s).');
+                // Entry 353: remember the result (resolved names + ids that can't be resolved) so this big
+                // download (2.7 s to read/parse on Hanh's machine) is not repeated on every load.
+                stillMissing.forEach(id => { if (!PLAYER_NAME_MAP[id]) PLAYER_NAME_UNRESOLVED.add(id); });
+                persistPlayerNameCache();
               } else {
                 console.warn('[FA Activity] Fallback player-pool fetch not ok (status ' + poolResp.status + ') — remaining unresolved names will show as "Player #id".');
               }
@@ -7762,12 +7770,13 @@ function faabColor(remaining) {
 // existing recorded kickoff timestamp (no worker.js/KV change needed —
 // WEEK_KICKOFF_TIMES keeps recording real kickoffs, exactly as before; only
 // how effectiveWeekForTimestamp() USES that timestamp changes here).
+let _chicagoFmt = null; // Entry 353: Intl.DateTimeFormat is expensive to construct (~0.4 ms); this ran 7,000+ times per load
 function chicagoPartsFor(date){
-  const fmt = new Intl.DateTimeFormat('en-US', {
+  const fmt = _chicagoFmt || (_chicagoFmt = new Intl.DateTimeFormat('en-US', {
     timeZone: 'America/Chicago',
     year: 'numeric', month: '2-digit', day: '2-digit',
     weekday: 'short', hour: '2-digit', hourCycle: 'h23',
-  });
+  }));
   const parts = {};
   fmt.formatToParts(date).forEach(p => { parts[p.type] = p.value; });
   return parts;
@@ -7790,7 +7799,16 @@ function chicagoMidnightUTC(year, month, day){
 // Rolls a real kickoff timestamp back to 00:00 Central on the Wednesday
 // at-or-before it (games run Thu–Mon, so this always lands 1-2 days before
 // kickoff, inside that same NFL week).
+const _wedBoundaryMemo = new Map(); // Entry 353: pure function of the timestamp; effectiveWeekForTimestamp asks the same 18 kickoffs for every transaction
 function wednesdayBoundaryFor(refDate){
+  const _memoKey = +refDate; // works for a Date or a plain ms timestamp, like the original
+  const _memoHit = _wedBoundaryMemo.get(_memoKey);
+  if (_memoHit !== undefined) return new Date(_memoHit);
+  const _res = _wednesdayBoundaryForUncached(refDate);
+  _wedBoundaryMemo.set(_memoKey, _res.getTime());
+  return _res;
+}
+function _wednesdayBoundaryForUncached(refDate){
   const WEEKDAY_IDX = {Sun:0,Mon:1,Tue:2,Wed:3,Thu:4,Fri:5,Sat:6};
   const parts = chicagoPartsFor(refDate);
   const wd = WEEKDAY_IDX[parts.weekday];
