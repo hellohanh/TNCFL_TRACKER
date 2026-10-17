@@ -8722,5 +8722,170 @@ async function copyRecapPacket(){
 })();
 
 </script>
+<!-- ═══ MOBILE LAYOUT (Entry 357, S079; approved by Hanh from preview) — phones/narrow screens only (≤820px). Desktop untouched. ═══
+     1. Top tab bar hidden; tabs live in a drawer opened from a yellow handle on the right edge
+        (swipe left on it, or tap). Last Refreshed + refresh button moved into the drawer footer.
+     2. Auto-rotate: while the phone is upright, any section (.mod) wider than the screen is drawn
+        rotated 90° counter-clockwise so turning the phone 90° clockwise shows it full size.
+        In landscape everything shows normally. Tall rotated sections scroll, never shrink. -->
+<style>
+#tdw-handle,#tdw-panel,#tdw-scrim{display:none;}
+@media (max-width:820px){
+  nav.nav-tabs{display:none !important;}
+  html,body{overflow-x:hidden;}
+  #tdw-handle{display:flex;position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:9000;
+    width:22px;height:84px;padding-left:4px;align-items:center;justify-content:center;
+    background:transparent;touch-action:none;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  #tdw-handle .tdw-pill{width:10px;height:72px;border-radius:8px 0 0 8px;background:var(--mustard);
+    box-shadow:-2px 0 10px rgba(217,165,33,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;}
+  #tdw-handle .tdw-pill i{display:block;width:4px;height:4px;border-radius:50%;background:rgba(0,0,0,.55);}
+  #tdw-scrim{display:block;position:fixed;inset:0;z-index:9001;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .22s;}
+  #tdw-panel{display:flex;flex-direction:column;position:fixed;top:0;right:0;bottom:0;z-index:9002;width:min(250px,72vw);
+    background:var(--bg2);border-left:3px solid var(--mustard);box-shadow:-8px 0 24px rgba(0,0,0,.6);
+    transform:translateX(105%);transition:transform .22s ease;touch-action:pan-y;}
+  #tdw-panel .tdw-head{padding:18px 18px 10px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mustard);}
+  #tdw-panel button.tdw-item{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;padding:13px 18px;
+    font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text2);cursor:pointer;border-left:3px solid transparent;}
+  #tdw-panel button.tdw-item.active{color:#fff;background:var(--bg3);border-left-color:var(--red);}
+  #tdw-panel .tdw-foot{margin-top:auto;padding:12px 18px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
+  #tdw-panel .tdw-refresh{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;cursor:pointer;
+    font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mustard);}
+  #tdw-panel .tdw-last{font-size:10px;color:var(--text3);}
+  #tdw-panel .tdw-hint{font-size:10px;color:var(--text3);opacity:.7;}
+  body.tdw-open #tdw-scrim{opacity:1;pointer-events:auto;}
+  body.tdw-open #tdw-panel{transform:translateX(0);}
+  body.tdw-dragging #tdw-panel,body.tdw-dragging #tdw-scrim{transition:none;}
+  .rot-wrap{position:relative;width:100%;overflow-x:auto;overflow-y:hidden;margin-bottom:14px;-webkit-overflow-scrolling:touch;}
+  .rot-sizer{position:relative;}
+  .rot-wrap > .rot-sizer > .mod{position:absolute;top:0;left:0;margin:0 !important;transform-origin:0 0;}
+  .rot-note{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mustard);margin:4px 0 6px;display:flex;align-items:center;gap:6px;}
+}
+</style>
+<div id="tdw-scrim"></div>
+<div id="tdw-handle" aria-label="Open tab menu" role="button"><div class="tdw-pill"><i></i><i></i><i></i></div></div>
+<nav id="tdw-panel" aria-label="Tracker tabs">
+  <div class="tdw-head">Tracker tabs</div><div id="tdw-list"></div>
+  <div class="tdw-foot">
+    <button class="tdw-refresh" id="tdw-refresh" title="Refresh all data">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="var(--mustard)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+      Refresh data</button>
+    <div class="tdw-last" id="tdw-last"></div>
+    <div class="tdw-hint">Swipe right or tap outside to close</div>
+  </div>
+</nav>
+<script>
+(function(){
+  const IDS=['standings','transactions','movement','hmotw','money','playoffs','recap','draft','pickem'];
+  const body=document.body, panel=document.getElementById('tdw-panel'), scrim=document.getElementById('tdw-scrim'),
+        handle=document.getElementById('tdw-handle'), list=document.getElementById('tdw-list');
+  const mqMobile=window.matchMedia('(max-width:820px)');
+  const curTab=()=>{ const i=[...document.querySelectorAll('.nav-tabs .tab')].findIndex(t=>t.classList.contains('active')); return IDS[i<0?0:i]; };
+
+  // ── Drawer ──────────────────────────────────────────────────────────────
+  function build(){
+    const tabs=[...document.querySelectorAll('.nav-tabs .tab')], cur=curTab();
+    list.innerHTML='';
+    IDS.forEach((id,i)=>{
+      const b=document.createElement('button'); b.className='tdw-item'+(id===cur?' active':'');
+      b.textContent=tabs[i]?tabs[i].textContent.trim():id; b.dataset.tab=id;
+      b.addEventListener('click',()=>{ showTab(id); close(); window.scrollTo({top:0}); });
+      list.appendChild(b);
+    });
+    const lr=document.getElementById('global-last-refreshed');
+    document.getElementById('tdw-last').textContent=lr?lr.textContent:'';
+  }
+  function open(){ if(!body.classList.contains('tdw-open')) build(); body.classList.add('tdw-open'); panel.style.transform=''; scrim.style.opacity=''; }
+  function close(){ body.classList.remove('tdw-open'); panel.style.transform=''; scrim.style.opacity=''; }
+  window.tdwOpen=open; window.tdwClose=close;
+  document.getElementById('tdw-refresh').addEventListener('click',function(){ close(); refreshAllData(this); });
+  const W=()=>panel.getBoundingClientRect().width;
+  function drag(startX, fromOpen){
+    let x0=startX, t0=Date.now(), dx=0; if(!fromOpen) build(); body.classList.add('tdw-dragging');
+    return { move(x){ dx=x-x0; const w=W();
+               const off=fromOpen?Math.max(0,Math.min(w,dx)):Math.max(0,Math.min(w,w+dx));
+               panel.style.transform='translateX('+off+'px)'; scrim.style.opacity=String(1-off/w); },
+             end(){ body.classList.remove('tdw-dragging'); const w=W(), v=dx/Math.max(1,Date.now()-t0);
+               const willOpen=fromOpen ? !(dx>w*0.3||v>0.5) : (dx<-w*0.3||v<-0.5);
+               willOpen?open():close(); } };
+  }
+  let d=null;
+  handle.addEventListener('touchstart',e=>{ d=drag(e.touches[0].clientX,false); d.moved=false; },{passive:true});
+  handle.addEventListener('touchmove',e=>{ if(d){ d.moved=true; d.move(e.touches[0].clientX); e.preventDefault(); } },{passive:false});
+  handle.addEventListener('touchend',()=>{ if(d){ d.moved?d.end():(body.classList.remove('tdw-dragging'),open()); d=null; } });
+  handle.addEventListener('click',()=>{ if(!body.classList.contains('tdw-open')) open(); });
+  panel.addEventListener('touchstart',e=>{ d=drag(e.touches[0].clientX,true); d.moved=false; },{passive:true});
+  panel.addEventListener('touchmove',e=>{ if(d){ d.moved=true; d.move(e.touches[0].clientX); } },{passive:true});
+  panel.addEventListener('touchend',()=>{ if(d){ d.moved?d.end():body.classList.remove('tdw-dragging'); d=null; } });
+  scrim.addEventListener('click',close);
+  document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+
+  // ── Auto-rotate wide sections (phone upright only) ──────────────────────
+  const mqUpright=window.matchMedia('(max-width:820px) and (orientation:portrait)');
+  const MIN_EXTRA=24;            // ignore sections that overflow by only a few px
+  function unrotateAll(){
+    document.querySelectorAll('.rot-wrap').forEach(w=>{
+      const m=w.querySelector('.mod'); if(m){ m.style.cssText=m.dataset.rotOrigStyle||''; delete m.dataset.rotOrigStyle; w.parentNode.insertBefore(m,w); }
+      w.remove();
+    });
+  }
+  function neededWidth(m){
+    let extra=0;
+    m.querySelectorAll('*').forEach(el=>{ if(el.offsetParent===null && getComputedStyle(el).position!=='fixed') return;
+      const e=el.scrollWidth-el.clientWidth; if(e>extra) extra=e;
+      const r=el.getBoundingClientRect(), mr=m.getBoundingClientRect(); const over=r.right-mr.right; if(over>extra) extra=over; });
+    return { extra, need: m.clientWidth+extra };
+  }
+  let busy=false;
+  function applyRotation(id){
+    if(busy) return; busy=true;
+    try{
+      unrotateAll();
+      if(!mqUpright.matches) return;
+      const tab=document.getElementById('tab-'+id); if(!tab||tab.style.display==='none') return;
+      const mods=[...tab.querySelectorAll('.mod')].filter(m=>!m.parentElement.closest('.mod'));
+      const wide=mods.map(m=>({m,...neededWidth(m)})).filter(x=>x.extra>MIN_EXTRA);
+      if(!wide.length) return;
+      const longSide=Math.max(window.innerHeight, screen.height||0)-24;
+      wide.forEach(x=>{
+        const m=x.m, Wd=Math.ceil(Math.max(x.need+8, Math.min(longSide, 900)));
+        const wrap=document.createElement('div'); wrap.className='rot-wrap';
+        const note=document.createElement('div'); note.className='rot-note';
+        note.innerHTML='<span style="display:inline-block;transform:rotate(90deg)">⟳</span> Turn phone sideways ↻';
+        const sizer=document.createElement('div'); sizer.className='rot-sizer';
+        m.parentNode.insertBefore(wrap,m); wrap.appendChild(note); wrap.appendChild(sizer); sizer.appendChild(m);
+        m.dataset.rotOrigStyle=m.getAttribute('style')||'';
+        m.style.width=Wd+'px'; m.style.transform='none';
+        x.Wd=Wd; x.sizer=sizer;
+      });
+      _show(id);                                 // re-render the tab so charts lay out at the wider width
+      wide.forEach(x=>{
+        const m=x.m, Wd=Math.max(x.Wd, m.scrollWidth), H=m.offsetHeight;
+        m.style.width=Wd+'px';
+        m.style.transform='translateY('+Wd+'px) rotate(-90deg)';
+        x.sizer.style.width=H+'px'; x.sizer.style.height=Wd+'px';
+      });
+    } finally { busy=false; }
+  }
+  window.tdwApplyRotation=()=>applyRotation(curTab());
+
+  // ── Hooks ───────────────────────────────────────────────────────────────
+  const _show=window.showTab;
+  window.showTab=function(id){
+    unrotateAll();
+    const r=_show.apply(this,arguments);
+    list.querySelectorAll('.tdw-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
+    if(mqMobile.matches) applyRotation(id);
+    return r;
+  };
+  if(typeof window.renderAll==='function'){
+    const _ra=window.renderAll;
+    window.renderAll=function(){ const r=_ra.apply(this,arguments); if(mqMobile.matches) setTimeout(()=>applyRotation(curTab()),0); return r; };
+  }
+  let rt=null;
+  const reapply=()=>{ clearTimeout(rt); rt=setTimeout(()=>{ unrotateAll(); _show(curTab()); applyRotation(curTab()); },200); };
+  (mqUpright.addEventListener?mqUpright.addEventListener('change',reapply):mqUpright.addListener(reapply));
+})();
+</script>
+
 </body>
 </html>
