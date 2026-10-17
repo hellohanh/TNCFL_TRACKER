@@ -3042,6 +3042,7 @@ function renderDDB() {
 
   if(LIVE_WK === 0){
     svg.innerHTML=''; left.innerHTML=''; right.innerHTML='';
+    { const cl = document.getElementById('ddb-curlbls'); if (cl) cl.innerHTML = ''; } // Entry 358
     empty.style.display='';
     return;
   }
@@ -3116,15 +3117,37 @@ function renderDDB() {
   // far-right edge, and advance one week to the right every time a new week
   // is played. Drawn inside the SVG (same visual rows as the dots) so they
   // can't drift from them. Spotlight click wired below like the edge labels.
-  if (LIVE_WK > 0) {
-    const curX = xOf(LIVE_WK-1) + 10;
-    MANAGERS.forEach((m,mi)=>{
-      const row = visualRow[mi][LIVE_WK-1];
-      if (row == null) return;
-      out += `<text class="ddb-lbl-svg" data-name="${m.name}" x="${curX}" y="${yOf(row)}" dominant-baseline="central" font-size="12" font-weight="600" fill="${m.color}" opacity="${spotOpacity(m.name,1)}" style="cursor:pointer;" font-family="Segoe UI,sans-serif">${m.name}</text>`;
-    });
-  }
+  // Entry 358 (S079): those names are NO LONGER SVG <text>. The SVG is drawn
+  // with preserveAspectRatio="none" and stretched to fill its flex slot, so SVG
+  // text got stretched sideways and looked bigger/wider than the left column.
+  // They are now the same HTML `.ddb-lbl` elements as the left column (identical
+  // font/size/weight), placed in an overlay layer at each current dot's
+  // on-screen position (offsetLeft/clientWidth = layout values, unaffected by
+  // the mobile rotate transform).
   svg.innerHTML=out;
+  const ddbInner = svg.parentElement;
+  ddbInner.style.position = 'relative';
+  let curLayer = document.getElementById('ddb-curlbls');
+  if (!curLayer) {
+    curLayer = document.createElement('div');
+    curLayer.id = 'ddb-curlbls';
+    curLayer.style.cssText = 'position:absolute;left:0;top:0;width:0;height:0;';
+    ddbInner.appendChild(curLayer);
+  }
+  curLayer.innerHTML = '';
+  if (LIVE_WK > 0) {
+    // SVG elements have no offsetLeft/offsetTop, so measure from the HTML columns either side
+    // (layout values: correct even while the section is drawn rotated on a phone).
+    const svgLeft = left.offsetLeft + left.offsetWidth, svgTop = left.offsetTop;
+    const svgW = ddbInner.clientWidth - left.offsetWidth - right.offsetWidth;
+    const sx = (svgW > 0 ? svgW : PW) / PW, sy = 1;   // height is fixed at H px (never stretched)
+    const curX = svgLeft + xOf(LIVE_WK-1) * sx + 8;
+    curLayer.innerHTML = MANAGERS.map((m,mi)=>{
+      const row = visualRow[mi][LIVE_WK-1];
+      if (row == null) return '';
+      return `<div class="ddb-lbl ddb-lbl-cur" data-name="${m.name}" style="left:${curX}px;top:${svgTop + yOf(row)*sy}px;color:${m.color};opacity:${spotOpacity(m.name,1)};cursor:pointer;">${m.name}</div>`;
+    }).join('');
+  }
 
   // Left/right edge labels — same visual-row placement as the lines above,
   // so labels line up with where each manager's dot actually sits.
@@ -3140,7 +3163,7 @@ function renderDDB() {
   svg.querySelectorAll('.ddb-dot').forEach(el => {
     el.addEventListener('click', e => { e.stopPropagation(); setSpotlight(el.dataset.name); });
   });
-  [...left.querySelectorAll('.ddb-lbl'), ...svg.querySelectorAll('.ddb-lbl-svg')].forEach(el => {
+  [...left.querySelectorAll('.ddb-lbl'), ...curLayer.querySelectorAll('.ddb-lbl-cur')].forEach(el => {
     el.addEventListener('click', e => { e.stopPropagation(); setSpotlight(el.dataset.name); });
   });
 
@@ -8755,6 +8778,23 @@ async function copyRecapPacket(){
   body.tdw-open #tdw-scrim{opacity:1;pointer-events:auto;}
   body.tdw-open #tdw-panel{transform:translateX(0);}
   body.tdw-dragging #tdw-panel,body.tdw-dragging #tdw-scrim{transition:none;}
+  /* Entry 360: on phones the "TNCFL 2026 / if the season were to end today" money-circle panel shows
+     on the Standings tab only (desktop unchanged: shows it on every tab except Pick'em and Draft). */
+  body:not(.tdw-tab-standings) #money-circle-card{display:none !important;}
+  /* Entry 363: QB Depth Chart fits the phone's width — no sideways scrolling. Desktop keeps 60% / 460px min. */
+  #qb-depth-wrap{width:100% !important;min-width:0 !important;overflow-x:hidden;}
+  .qb-depth-table{font-size:11px;table-layout:auto;}
+  .qb-depth-table thead th{padding:6px 4px;font-size:9px;letter-spacing:0.02em;white-space:normal;line-height:1.25;vertical-align:bottom;}
+  .qb-depth-table thead th .arrow{margin-left:2px;}
+  .qb-depth-table .pk-filter-icon{margin-left:2px;}
+  .qb-depth-table td{padding:6px 4px;}
+  .qb-depth-table td:first-child,.qb-depth-table th:first-child{padding-left:8px;}
+  .qb-depth-table td.qb-name{white-space:normal;line-height:1.3;}
+  .qb-depth-table .dot{width:6px;height:6px;margin-right:4px;}
+  .qb-depth-table .qb-team-badge{font-size:9.5px;padding:2px 4px;}
+  .qb-depth-table .depth-badge{padding:2px 6px;font-size:9.5px;}
+  .qb-depth-table .qb-status-badge{margin-left:4px;padding:0 3px;font-size:8.5px;}
+  .qb-depth-table .fa-label{font-size:10px;}
   .rot-wrap{position:relative;width:100%;overflow-x:auto;overflow-y:hidden;margin-bottom:14px;-webkit-overflow-scrolling:touch;}
   .rot-sizer{position:relative;}
   .rot-wrap > .rot-sizer > .mod{position:absolute;top:0;left:0;margin:0 !important;transform-origin:0 0;}
@@ -8835,15 +8875,24 @@ async function copyRecapPacket(){
       const r=el.getBoundingClientRect(), mr=m.getBoundingClientRect(); const over=r.right-mr.right; if(over>extra) extra=over; });
     return { extra, need: m.clientWidth+extra };
   }
+  // Entry 358: tabs where EVERY section rotates (Hanh: "rotate all the charts on the standings tab"),
+  // not only the ones wider than the screen.
+  const ROTATE_ALL_TABS=new Set(['standings','pickem','hmotw','money']);   // Entry 359: Pick'em too; Entry 361: HMOTW; Entry 362: Money
+  const FIT_TABS=new Set(['hmotw']);   // Entry 361: rotated sections shrink to fit the turned screen entirely
+  // Entry 359: Pick'em's chart/table size themselves to their container, and calling showTab('pickem')
+  // again before its first load finishes would start a SECOND fetch — so no re-draw pass there.
+  const NO_RERENDER_TABS=new Set(['pickem']);
   let busy=false;
   function applyRotation(id){
     if(busy) return; busy=true;
+    const y0=window.scrollY, sl0=[...document.querySelectorAll('.rot-wrap')].map(w=>w.scrollLeft);
     try{
       unrotateAll();
       if(!mqUpright.matches) return;
       const tab=document.getElementById('tab-'+id); if(!tab||tab.style.display==='none') return;
       const mods=[...tab.querySelectorAll('.mod')].filter(m=>!m.parentElement.closest('.mod'));
-      const wide=mods.map(m=>({m,...neededWidth(m)})).filter(x=>x.extra>MIN_EXTRA);
+      const all=ROTATE_ALL_TABS.has(id);
+      const wide=mods.map(m=>({m,...neededWidth(m)})).filter(x=>all||x.extra>MIN_EXTRA);
       if(!wide.length) return;
       const longSide=Math.max(window.innerHeight, screen.height||0)-24;
       wide.forEach(x=>{
@@ -8857,22 +8906,30 @@ async function copyRecapPacket(){
         m.style.width=Wd+'px'; m.style.transform='none';
         x.Wd=Wd; x.sizer=sizer;
       });
-      _show(id);                                 // re-render the tab so charts lay out at the wider width
+      if(!NO_RERENDER_TABS.has(id)) _show(id);   // re-render the tab so charts lay out at the wider width
       wide.forEach(x=>{
         const m=x.m, Wd=Math.max(x.Wd, m.scrollWidth), H=m.offsetHeight;
+        // Entry 361: FIT tabs shrink each rotated section so ALL of it is visible on the turned screen —
+        // its height fits the phone's short side (no swiping to reach the last rows/bars) and its
+        // length fits the visible long side. Other tabs stay full size (s=1) and scroll.
+        const wrapW=x.sizer.parentElement.clientWidth;
+        const s=FIT_TABS.has(id) ? Math.min(1, wrapW/H, (window.innerHeight-48)/Wd) : 1;
         m.style.width=Wd+'px';
-        m.style.transform='translateY('+Wd+'px) rotate(-90deg)';
-        x.sizer.style.width=H+'px'; x.sizer.style.height=Wd+'px';
+        m.style.transform='translateY('+(Wd*s)+'px) rotate(-90deg)'+(s<1?' scale('+s+')':'');
+        x.sizer.style.width=(H*s)+'px'; x.sizer.style.height=(Wd*s)+'px';
       });
-    } finally { busy=false; }
+      document.querySelectorAll('.rot-wrap').forEach((w,i)=>{ if(sl0[i]) w.scrollLeft=sl0[i]; });
+    } finally { busy=false; if(Math.abs(window.scrollY-y0)>1) window.scrollTo(0,y0); }
   }
   window.tdwApplyRotation=()=>applyRotation(curTab());
 
   // ── Hooks ───────────────────────────────────────────────────────────────
+  body.classList.add('tdw-tab-'+curTab());                          // Entry 360: initial tab (Standings on load)
   const _show=window.showTab;
   window.showTab=function(id){
     unrotateAll();
     const r=_show.apply(this,arguments);
+    IDS.forEach(t=>body.classList.toggle('tdw-tab-'+t, t===id));   // Entry 360: drives the phone-only money-circle rule
     list.querySelectorAll('.tdw-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
     if(mqMobile.matches) applyRotation(id);
     return r;
@@ -8880,6 +8937,43 @@ async function copyRecapPacket(){
   if(typeof window.renderAll==='function'){
     const _ra=window.renderAll;
     window.renderAll=function(){ const r=_ra.apply(this,arguments); if(mqMobile.matches) setTimeout(()=>applyRotation(curTab()),0); return r; };
+  }
+  // Entry 358: charts measure their width with getBoundingClientRect(), which reports the ROTATED
+  // box — so any re-draw while rotated (spotlight click, window resize) came out the wrong size.
+  // Spotlight: un-rotate, re-draw, re-rotate. Resize: phones fire resize when the address bar
+  // shows/hides (height only) — skip that re-draw on phones; a real width change re-rotates.
+  ['setSpotlight','clearSpotlight'].forEach(fn=>{
+    const orig=window[fn]; if(typeof orig!=='function') return;
+    window[fn]=function(){
+      if(!mqMobile.matches || !document.querySelector('.rot-wrap')) return orig.apply(this,arguments);
+      unrotateAll(); const r=orig.apply(this,arguments); applyRotation(curTab()); return r;
+    };
+  });
+  // Entry 359: Pick'em fills in AFTER the tab opens (lazy fetch), and re-draws on week change, sort,
+  // filter and refresh — each changes the sections' size, so re-rotate right after any of those.
+  let pkT=null;
+  ['renderPickemTable','renderPickemBump'].forEach(fn=>{
+    const orig=window[fn]; if(typeof orig!=='function') return;
+    window[fn]=function(){
+      const r=orig.apply(this,arguments);
+      if(mqMobile.matches && !busy && curTab()==='pickem'){ clearTimeout(pkT); pkT=setTimeout(()=>applyRotation('pickem'),0); }
+      return r;
+    };
+  });
+  // Entry 362: Money's collapsible "Net Column — Path to $0.00" card changes size when opened/closed.
+  if(typeof window.toggleZeroCard==='function'){
+    const origZ=window.toggleZeroCard;
+    window.toggleZeroCard=function(){ const r=origZ.apply(this,arguments);
+      if(mqMobile.matches && curTab()==='money') applyRotation('money'); return r; };
+  }
+  if(typeof window._onResizeRedraw==='function'){
+    const origRR=window._onResizeRedraw; let lastW=window.innerWidth;
+    window._onResizeRedraw=function(){
+      const wChanged=window.innerWidth!==lastW; lastW=window.innerWidth;
+      if(!mqMobile.matches) return origRR.apply(this,arguments);
+      if(!wChanged) return;                       // address-bar resize on a phone: nothing to re-draw
+      unrotateAll(); const r=origRR.apply(this,arguments); applyRotation(curTab()); return r;
+    };
   }
   let rt=null;
   const reapply=()=>{ clearTimeout(rt); rt=setTimeout(()=>{ unrotateAll(); _show(curTab()); applyRotation(curTab()); },200); };
