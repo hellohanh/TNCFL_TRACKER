@@ -8810,6 +8810,11 @@ async function copyRecapPacket(){
   .mov-tbl-wrap table:has(th:nth-child(8)) td{font-size:8px;letter-spacing:-0.02em;}
   .mov-tbl-wrap table:has(th:nth-child(8)) th{font-size:7.5px;}
   .mov-tbl-wrap table:has(th:nth-child(8)) th.tl,.mov-tbl-wrap table:has(th:nth-child(8)) td.tl{width:56px;font-size:9px;}
+  /* Entry 385 (Hanh): Recap touchdown card on phones — "Full Roster" / "Starting Lineup" headers on two lines,
+     number columns shrink to fit, the Manager column takes the rest so name + dot stay on one line; all 4 columns fit. */
+  .td-tbl th{white-space:normal;line-height:1.2;padding:6px 6px;vertical-align:bottom;}
+  .td-tbl th:not(:first-child),.td-tbl td:not(:first-child){width:1%;padding-left:6px;padding-right:8px;}
+  .td-tbl th:first-child,.td-tbl td:first-child{width:auto;white-space:nowrap;padding-left:8px;}
   .rot-wrap{position:relative;width:100%;overflow-x:auto;overflow-y:hidden;margin-bottom:14px;-webkit-overflow-scrolling:touch;}
   .rot-sizer{position:relative;}
   .rot-wrap #money-circle-card .mc-grid{grid-template-columns:repeat(2,150px);}   /* Entry 382: 2:3 boxes when turned */
