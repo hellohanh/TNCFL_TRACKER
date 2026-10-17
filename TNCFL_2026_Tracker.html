@@ -8797,7 +8797,7 @@ async function copyRecapPacket(){
   .qb-depth-table .fa-label{font-size:10px;}
   .rot-wrap{position:relative;width:100%;overflow-x:auto;overflow-y:hidden;margin-bottom:14px;-webkit-overflow-scrolling:touch;}
   .rot-sizer{position:relative;}
-  .rot-wrap > .rot-sizer > .mod{position:absolute;top:0;left:0;margin:0 !important;transform-origin:0 0;}
+  .rot-wrap > .rot-sizer > .rot-unit{position:absolute;top:0;left:0;margin:0 !important;transform-origin:0 0;}
   .rot-note{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mustard);margin:4px 0 6px;display:flex;align-items:center;gap:6px;}
 }
 </style>
@@ -8864,9 +8864,11 @@ async function copyRecapPacket(){
   const MIN_EXTRA=24;            // ignore sections that overflow by only a few px
   function unrotateAll(){
     document.querySelectorAll('.rot-wrap').forEach(w=>{
-      const m=w.querySelector('.mod'); if(m){ m.style.cssText=m.dataset.rotOrigStyle||''; delete m.dataset.rotOrigStyle; w.parentNode.insertBefore(m,w); }
+      const m=w.querySelector('.rot-unit'); if(m){ m.style.cssText=m.dataset.rotOrigStyle||''; delete m.dataset.rotOrigStyle; m.classList.remove('rot-unit'); w.parentNode.insertBefore(m,w); }
       w.remove();
     });
+    // Entry 364: put split rows (e.g. Points Behind Money Circle | Despair Differential) back side by side.
+    document.querySelectorAll('[data-rot-split]').forEach(r=>{ r.style.cssText=r.dataset.rotSplit==='-'?'':r.dataset.rotSplit; delete r.dataset.rotSplit; });
   }
   function neededWidth(m){
     let extra=0;
@@ -8878,7 +8880,9 @@ async function copyRecapPacket(){
   // Entry 358: tabs where EVERY section rotates (Hanh: "rotate all the charts on the standings tab"),
   // not only the ones wider than the screen.
   const ROTATE_ALL_TABS=new Set(['standings','pickem','hmotw','money']);   // Entry 359: Pick'em too; Entry 361: HMOTW; Entry 362: Money
-  const FIT_TABS=new Set(['hmotw']);   // Entry 361: rotated sections shrink to fit the turned screen entirely
+  const FIT_TABS=new Set(['hmotw','standings']);   // Entry 361: rotated sections shrink to fit the turned screen entirely; Entry 364: Standings too
+  // Entry 364: sections made of side-by-side panels that rotate as SEPARATE panels, stacked (tab -> row selector).
+  const SPLIT_ROWS={standings:'.pbmc-tdd-row'};
   // Entry 359: Pick'em's chart/table size themselves to their container, and calling showTab('pickem')
   // again before its first load finishes would start a SECOND fetch — so no re-draw pass there.
   const NO_RERENDER_TABS=new Set(['pickem']);
@@ -8890,9 +8894,18 @@ async function copyRecapPacket(){
       unrotateAll();
       if(!mqUpright.matches) return;
       const tab=document.getElementById('tab-'+id); if(!tab||tab.style.display==='none') return;
-      const mods=[...tab.querySelectorAll('.mod')].filter(m=>!m.parentElement.closest('.mod'));
+      const mods=[];
+      [...tab.querySelectorAll('.mod')].filter(m=>!m.parentElement.closest('.mod')).forEach(m=>{
+        const row=SPLIT_ROWS[id] && m.querySelector(SPLIT_ROWS[id]);
+        if(row && row.children.length>1){
+          row.dataset.rotSplit=row.getAttribute('style')||'-'; row.style.display='block';
+          [...row.children].forEach(c=>mods.push(c));
+        } else mods.push(m);
+      });
+      mods.forEach(m=>m.classList.add('rot-unit'));
       const all=ROTATE_ALL_TABS.has(id);
       const wide=mods.map(m=>({m,...neededWidth(m)})).filter(x=>all||x.extra>MIN_EXTRA);
+      mods.forEach(m=>{ if(!wide.some(x=>x.m===m)) m.classList.remove('rot-unit'); });
       if(!wide.length) return;
       const longSide=Math.max(window.innerHeight, screen.height||0)-24;
       wide.forEach(x=>{
@@ -8903,7 +8916,7 @@ async function copyRecapPacket(){
         const sizer=document.createElement('div'); sizer.className='rot-sizer';
         m.parentNode.insertBefore(wrap,m); wrap.appendChild(note); wrap.appendChild(sizer); sizer.appendChild(m);
         m.dataset.rotOrigStyle=m.getAttribute('style')||'';
-        m.style.width=Wd+'px'; m.style.transform='none';
+        m.style.width=Wd+'px'; m.style.maxWidth='none'; m.style.transform='none';   // Entry 364: max-width lifted (split panels have max-width:100%)
         x.Wd=Wd; x.sizer=sizer;
       });
       if(!NO_RERENDER_TABS.has(id)) _show(id);   // re-render the tab so charts lay out at the wider width
