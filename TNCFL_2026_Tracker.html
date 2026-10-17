@@ -8795,8 +8795,24 @@ async function copyRecapPacket(){
   .qb-depth-table .depth-badge{padding:2px 6px;font-size:9.5px;}
   .qb-depth-table .qb-status-badge{margin-left:4px;padding:0 3px;font-size:8.5px;}
   .qb-depth-table .fa-label{font-size:10px;}
+  /* Entry 378 (Hanh): Weekly Movement score tables fit the phone width — smaller type, tighter padding,
+     narrower Name column, headers may wrap ("SUN / MOR"). No sideways scrolling. Desktop unchanged. */
+  .mov-tbl-wrap{overflow-x:hidden;}
+  .mov-tbl-wrap th.tl,.mov-tbl-wrap td.tl{width:64px;}
+  .mov-tbl-wrap th{font-size:8px;padding:4px 1px;white-space:normal;line-height:1.15;vertical-align:bottom;}
+  .mov-tbl-wrap th.tl{padding-left:6px;}
+  .mov-tbl-wrap td{font-size:9.5px;padding:4px 1px;letter-spacing:-0.01em;}
+  .mov-tbl-wrap td.tl{padding-left:6px;font-size:10px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .mov-tbl-wrap td.tl .dot{width:6px;height:6px;margin-right:4px;}
+  .mov-tbl-wrap th .si{font-size:7px;}
+  /* Entry 378: busier weeks step the type down so every session still fits (6 sessions = 7 columns, 7+ = 8+). */
+  .mov-tbl-wrap table:has(th:nth-child(7)) td{font-size:8.75px;}
+  .mov-tbl-wrap table:has(th:nth-child(8)) td{font-size:8px;letter-spacing:-0.02em;}
+  .mov-tbl-wrap table:has(th:nth-child(8)) th{font-size:7.5px;}
+  .mov-tbl-wrap table:has(th:nth-child(8)) th.tl,.mov-tbl-wrap table:has(th:nth-child(8)) td.tl{width:56px;font-size:9px;}
   .rot-wrap{position:relative;width:100%;overflow-x:auto;overflow-y:hidden;margin-bottom:14px;-webkit-overflow-scrolling:touch;}
   .rot-sizer{position:relative;}
+  .rot-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 18px;box-sizing:border-box;}   /* Entry 375 */
   .rot-wrap > .rot-sizer > .rot-unit{position:absolute;top:0;left:0;margin:0 !important;transform-origin:0 0;}
   .rot-note{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mustard);margin:4px 0 6px;display:flex;align-items:center;gap:6px;}
 }
@@ -8870,6 +8886,7 @@ async function copyRecapPacket(){
     // Entry 365: undo the equal-height stretch on cards.
     document.querySelectorAll('[data-rot-flex-orig]').forEach(el=>{ const o=el.dataset.rotFlexOrig; if(o==='-') el.removeAttribute('style'); else el.setAttribute('style',o); delete el.dataset.rotFlexOrig; });
     // Entry 364: put split rows (e.g. Points Behind Money Circle | Despair Differential) back side by side.
+    document.querySelectorAll('.rot-card').forEach(u=>u.classList.remove('rot-card'));   // Entry 375
     document.querySelectorAll('[data-rot-split]').forEach(r=>{ r.style.cssText=r.dataset.rotSplit==='-'?'':r.dataset.rotSplit; delete r.dataset.rotSplit; });
   }
   function neededWidth(m){
@@ -8884,17 +8901,30 @@ async function copyRecapPacket(){
   const ROTATE_ALL_TABS=new Set(['standings','pickem','hmotw','money']);   // Entry 359: Pick'em too; Entry 361: HMOTW; Entry 362: Money
   const FIT_TABS=new Set(['hmotw','standings','money']);   // Entry 368: Money too   // Entry 361: rotated sections shrink to fit the turned screen entirely; Entry 364: Standings too
   // Entry 364: sections made of side-by-side panels that rotate as SEPARATE panels, stacked (tab -> row selector).
-  const SPLIT_ROWS={standings:'.pbmc-tdd-row'};
+  // Entry 371: HMOTW High Man | Thirsting. (A {row, unit, card} form is supported — Entry 375 — but Money's
+  // Season Cap Rules split was tried and dropped at Hanh's call; it stays one panel.)
+  const SPLIT_ROWS={standings:'.pbmc-tdd-row', hmotw:'div[style*="grid-template-columns"]'};
   // Entry 365: on these tabs every turned panel is exactly the same height — the full short side of the
   // turned screen. A panel that fits with room to spare is stretched (its card grows) to match.
   const EQUAL_HEIGHT_TABS=new Set(['standings','hmotw','money']);   // Entry 367: HMOTW too; Entry 368: Money
   // Entry 369: single panels (not a whole tab) that get the same fit + same-height treatment.
-  const FIT_PANELS={playoffs:'#bracket'};
+  const FIT_PANELS={playoffs:'#bracket', transactions:'.faab-card'};   // Entry 377: FAAB Budget
+  // Entry 377 (Hanh): single panels that always rotate on phones, even when they fit the screen.
+  const FORCE_PANELS={transactions:'.faab-card'};
+  // Entry 370 (Hanh): the Score Table fits by HEIGHT only — all 10 managers visible across the turned
+  // screen, larger text; its length may run past the screen (swipe for later weeks).
+  const HEIGHT_ONLY_PANELS={standings:'#standings-tbl', transactions:'.faab-card'};   // Entry 377: FAAB Budget too
+  const HM_DESKTOP_RATIO=443/210;
+  const PBMC_DESKTOP={w:348,h:394};   // Entry 373: Points Behind Money Circle panel size on a desktop monitor   // Entry 372: High Man stage width:height on a desktop monitor
+  const HEIGHT_ONLY_TABS=new Set(['hmotw','money']);   // Entry 371: every HMOTW panel fits by height only (Score Table logic); Entry 374: Money too
+  const panelHeightOnly=(id,m)=>HEIGHT_ONLY_TABS.has(id) || !!(HEIGHT_ONLY_PANELS[id] && m.querySelector(HEIGHT_ONLY_PANELS[id]));
   const panelFits=(id,m)=>FIT_TABS.has(id) || !!(FIT_PANELS[id] && m.querySelector(FIT_PANELS[id]));
   const panelEqual=(id,m)=>EQUAL_HEIGHT_TABS.has(id) || !!(FIT_PANELS[id] && m.querySelector(FIT_PANELS[id]));
   // Entry 359: Pick'em's chart/table size themselves to their container, and calling showTab('pickem')
   // again before its first load finishes would start a SECOND fetch — so no re-draw pass there.
   const NO_RERENDER_TABS=new Set(['pickem']);
+  // Entry 376 (Hanh): panels OUTSIDE a tab's own container that rotate with it, placed first (Standings' money-circle card).
+  const EXTRA_UNITS={standings:['#money-circle-card']};
   let busy=false;
   function applyRotation(id){
     if(busy) return; busy=true;
@@ -8904,27 +8934,41 @@ async function copyRecapPacket(){
       if(!mqUpright.matches) return;
       const tab=document.getElementById('tab-'+id); if(!tab||tab.style.display==='none') return;
       const mods=[];
+      (EXTRA_UNITS[id]||[]).forEach(sel=>{ const e=document.querySelector(sel); if(e && getComputedStyle(e).display!=='none' && e.offsetHeight>0) mods.push(e); });
       [...tab.querySelectorAll('.mod')].filter(m=>!m.parentElement.closest('.mod')).forEach(m=>{
-        const row=SPLIT_ROWS[id] && m.querySelector(SPLIT_ROWS[id]);
+        const sp=typeof SPLIT_ROWS[id]==='string'?{row:SPLIT_ROWS[id]}:SPLIT_ROWS[id];
+        const row=sp && m.querySelector(sp.row);
         if(row && row.children.length>1){
           row.dataset.rotSplit=row.getAttribute('style')||'-'; row.style.display='block';
-          [...row.children].forEach(c=>mods.push(c));
+          // Entry 371: a section heading left above split panels would sit upright on its own — hide it while rotated.
+          [...m.children].filter(c=>c!==row && c.classList.contains('mod-label')).forEach(l=>{ l.dataset.rotSplit=l.getAttribute('style')||'-'; l.style.display='none'; });
+          const units=sp.unit?[...row.querySelectorAll(sp.unit)]:[...row.children];
+          [...row.children].filter(c=>!units.includes(c)).forEach(c=>{ c.dataset.rotSplit=c.getAttribute('style')||'-'; c.style.display='none'; });
+          if(sp.card){ row.style.background='none'; row.style.border='0'; row.style.padding='0'; row.style.margin='0'; units.forEach(u=>u.classList.add('rot-card')); }
+          units.forEach(c=>mods.push(c));
         } else mods.push(m);
       });
       mods.forEach(m=>m.classList.add('rot-unit'));
       const all=ROTATE_ALL_TABS.has(id);
-      const wide=mods.map(m=>({m,...neededWidth(m)})).filter(x=>all||x.extra>MIN_EXTRA);
+      const wide=mods.map(m=>({m,...neededWidth(m)})).filter(x=>all||x.extra>MIN_EXTRA||!!(FORCE_PANELS[id] && x.m.querySelector(FORCE_PANELS[id])));
       mods.forEach(m=>{ if(!wide.some(x=>x.m===m)) m.classList.remove('rot-unit'); });
       if(!wide.length) return;
       const longSide=Math.max(window.innerHeight, screen.height||0)-24;
       wide.forEach(x=>{
-        const m=x.m, Wd=Math.ceil(Math.max(x.need+8, Math.min(longSide, 900)));
+        const m=x.m; let Wd=Math.ceil(Math.max(x.need+8, Math.min(longSide, 900)));
+        // Entry 372 (Hanh): the High Man animation keeps the DESKTOP (monitor) shape when turned — 443x210 at
+        // full desktop width, about 2.11 : 1 — instead of stretching to the phone's long side.
+        if(m.id==='crown-card'){ const st=document.getElementById('hmstage');
+          if(st && st.offsetHeight){ Wd=Math.round(st.offsetHeight*HM_DESKTOP_RATIO + (m.offsetWidth - st.offsetWidth)); } }
         const wrap=document.createElement('div'); wrap.className='rot-wrap';
         // Entry 366: the "Turn phone sideways" tag was removed (Hanh) — no label above rotated panels.
         const sizer=document.createElement('div'); sizer.className='rot-sizer';
         m.parentNode.insertBefore(wrap,m); wrap.appendChild(sizer); sizer.appendChild(m);
         m.dataset.rotOrigStyle=m.getAttribute('style')||'';
         m.style.width=Wd+'px'; m.style.maxWidth='none'; m.style.transform='none';   // Entry 364: max-width lifted (split panels have max-width:100%)
+        // Entry 373 (Hanh): Points Behind Money Circle keeps its DESKTOP (monitor) shape when turned —
+        // 348 x 394 on a desktop, about 0.88 : 1 — then scales as a whole to the turned screen height.
+        if(m.classList.contains('pbmc-col')){ Wd=PBMC_DESKTOP.w; x.Wd=Wd; m.style.width=Wd+'px'; m.style.minHeight=PBMC_DESKTOP.h+'px'; }
         x.Wd=Wd; x.sizer=sizer;
       });
       if(!NO_RERENDER_TABS.has(id)) _show(id);   // re-render the tab so charts lay out at the wider width
@@ -8934,7 +8978,7 @@ async function copyRecapPacket(){
         // its height fits the phone's short side (no swiping to reach the last rows/bars) and its
         // length fits the visible long side. Other tabs stay full size (s=1) and scroll.
         const wrapW=x.sizer.parentElement.clientWidth;
-        const s=panelFits(id,m) ? Math.min(1, wrapW/H, (window.innerHeight-48)/Wd) : 1;
+        const s=!panelFits(id,m) ? 1 : panelHeightOnly(id,m) ? Math.min(1, wrapW/H) : Math.min(1, wrapW/H, (window.innerHeight-48)/Wd);
         if(panelEqual(id,m) && H*s < wrapW-0.5){
           // Entry 365: stretch to the shared height: flex column so the last block (the card) grows.
           m.style.display='flex'; m.style.flexDirection='column'; m.style.minHeight=(wrapW/s)+'px';
