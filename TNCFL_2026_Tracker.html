@@ -6209,12 +6209,13 @@ const CAREER_LEADERS = {
 
 // Every time in league history someone scored >=200 and STILL lost the
 // week to an even higher score, oldest data first re-sorted by score desc
-// to match the rules doc's table. 11 instances, confirmed exhaustively
+// to match the rules doc's table. 12 instances (Tony 2026 Wk5 added Entry 356), originally 11 confirmed exhaustively
 // against every real weekly score in the raw data, not just the premade
 // top-25 all_time_scores list (which would have missed several of these).
 const SCORED_200_AND_LOST = [
   { manager: 'Hanh',   score: 209.00, year: '2025', week: 15, beatenBy: 'Kito',   beatenByScore: 210.32 },
   { manager: 'Ted',    score: 208.40, year: '2022', week: 8,  beatenBy: 'Titi',   beatenByScore: 219.44 },
+  { manager: 'Tony',   score: 206.02, year: '2026', week: 5,  beatenBy: 'Hanh',   beatenByScore: 206.98 }, // Entry 356 (S079): 12th, per Hanh / Week 5 recap
   { manager: 'Mikey',  score: 206.00, year: '2018', week: 4,  beatenBy: 'Damian', beatenByScore: 209.00 },
   { manager: 'Randy',  score: 206.00, year: '2020', week: 17, beatenBy: 'La',     beatenByScore: 211.00 },
   { manager: 'Tony',   score: 204.42, year: '2024', week: 15, beatenBy: 'Randy',  beatenByScore: 215.58 },
@@ -6392,15 +6393,19 @@ function computeRecapTalkingPoints(wk) {
   }
 
   // "Scored 200+ and still lost" — the SCORED_200_AND_LOST club (11 times in
-  // league history as of the S037 Record Book export). Checks every manager
+  // league history as of the S037 Record Book export; 12 after Tony 2026 Wk5,
+  // Entry 356). Entry 356: the "Nth time" count only includes entries from
+  // BEFORE this week, so re-viewing an earlier week (e.g. Wk 5 itself) keeps
+  // its own correct number instead of counting later additions. Checks every manager
   // this week, not just the winner — this is specifically about someone who
   // ISN'T the HMOTW winner clearing 200 anyway.
+  const s200Prior = SCORED_200_AND_LOST.filter(e => !(e.year === String(CFG.SEASON) && e.week >= wk)).length;
   MANAGERS.forEach(m => {
     const sc = m.pts[w];
     if (sc != null && sc >= 200 && !winners.includes(m.name)) {
       stories.push({
         key: 'scored_200_lost',
-        label: `Brutal: ${m.name} scored ${sc.toFixed(2)} — a 200+ week — and STILL lost to ${winners.join(' & ')}'s ${hiScore.toFixed(2)}. That's the ${SCORED_200_AND_LOST.length + 1}${[1,21,31].includes(SCORED_200_AND_LOST.length+1)?'st':[2,22,32].includes(SCORED_200_AND_LOST.length+1)?'nd':[3,23,33].includes(SCORED_200_AND_LOST.length+1)?'rd':'th'} time in league history that's happened`,
+        label: `Brutal: ${m.name} scored ${sc.toFixed(2)} — a 200+ week — and STILL lost to ${winners.join(' & ')}'s ${hiScore.toFixed(2)}. That's the ${s200Prior + 1}${[1,21,31].includes(s200Prior+1)?'st':[2,22,32].includes(s200Prior+1)?'nd':[3,23,33].includes(s200Prior+1)?'rd':'th'} time in league history that's happened`,
       });
     }
   });
