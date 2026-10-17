@@ -8812,6 +8812,8 @@ async function copyRecapPacket(){
   .mov-tbl-wrap table:has(th:nth-child(8)) th.tl,.mov-tbl-wrap table:has(th:nth-child(8)) td.tl{width:56px;font-size:9px;}
   .rot-wrap{position:relative;width:100%;overflow-x:auto;overflow-y:hidden;margin-bottom:14px;-webkit-overflow-scrolling:touch;}
   .rot-sizer{position:relative;}
+  .rot-wrap #money-circle-card .mc-grid{grid-template-columns:repeat(2,150px);}   /* Entry 382: 2:3 boxes when turned */
+  .rot-wrap #money-circle-card .mc-slot{box-sizing:border-box;aspect-ratio:3/2;min-width:0;overflow:hidden;}
   .rot-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 18px;box-sizing:border-box;}   /* Entry 375 */
   .rot-wrap > .rot-sizer > .rot-unit{position:absolute;top:0;left:0;margin:0 !important;transform-origin:0 0;}
   .rot-note{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mustard);margin:4px 0 6px;display:flex;align-items:center;gap:6px;}
@@ -8913,9 +8915,18 @@ async function copyRecapPacket(){
   const FORCE_PANELS={transactions:'.faab-card'};
   // Entry 370 (Hanh): the Score Table fits by HEIGHT only — all 10 managers visible across the turned
   // screen, larger text; its length may run past the screen (swipe for later weeks).
-  const HEIGHT_ONLY_PANELS={standings:'#standings-tbl', transactions:'.faab-card'};   // Entry 377: FAAB Budget too
+  const HEIGHT_ONLY_PANELS={standings:'#standings-tbl, #sg-wrap', transactions:'.faab-card'};   // Entry 377: FAAB Budget too; Entry 379: Current Scoreboard (#sg-wrap)
   const HM_DESKTOP_RATIO=443/210;
-  const PBMC_DESKTOP={w:348,h:394};   // Entry 373: Points Behind Money Circle panel size on a desktop monitor   // Entry 372: High Man stage width:height on a desktop monitor
+  const PBMC_DESKTOP={w:348,h:394};
+  // Entry 380 (Hanh): the money-circle card's four boxes are kept short when turned (compact width) and the card
+  // keeps its own height — no equal-height stretch, so no dead space under it.
+  // Entry 382 (Hanh): when turned, each manager box is a 2:3 (height:width) rectangle — 150 x 100 —
+  // so the card is 2*150 + 10 gap + 45 padding = 355px wide; the card then scales (up or down) to fill the
+  // turned screen's full height exactly. (Supersedes Entry 381's 85px boxes.)
+  const MC_BOX_W=150, MC_TURNED_W=2*MC_BOX_W+10+45;
+  // Entry 383 (Hanh): panels that FILL the turned screen height exactly (scaling up if needed) and are never
+  // stretched — the money-circle card and the Current Scoreboard (whose empty strip under the chart is trimmed).
+  const isFillPanel=m=>m.id==='money-circle-card' || !!m.querySelector('#sg-wrap') || m.classList.contains('pbmc-col');   // Entry 384: + Points Behind Money Circle   // Entry 373: Points Behind Money Circle panel size on a desktop monitor   // Entry 372: High Man stage width:height on a desktop monitor
   const HEIGHT_ONLY_TABS=new Set(['hmotw','money']);   // Entry 371: every HMOTW panel fits by height only (Score Table logic); Entry 374: Money too
   const panelHeightOnly=(id,m)=>HEIGHT_ONLY_TABS.has(id) || !!(HEIGHT_ONLY_PANELS[id] && m.querySelector(HEIGHT_ONLY_PANELS[id]));
   const panelFits=(id,m)=>FIT_TABS.has(id) || !!(FIT_PANELS[id] && m.querySelector(FIT_PANELS[id]));
@@ -8968,25 +8979,34 @@ async function copyRecapPacket(){
         m.style.width=Wd+'px'; m.style.maxWidth='none'; m.style.transform='none';   // Entry 364: max-width lifted (split panels have max-width:100%)
         // Entry 373 (Hanh): Points Behind Money Circle keeps its DESKTOP (monitor) shape when turned —
         // 348 x 394 on a desktop, about 0.88 : 1 — then scales as a whole to the turned screen height.
-        if(m.classList.contains('pbmc-col')){ Wd=PBMC_DESKTOP.w; x.Wd=Wd; m.style.width=Wd+'px'; m.style.minHeight=PBMC_DESKTOP.h+'px'; }
+        if(m.id==='money-circle-card'){ Wd=MC_TURNED_W; x.Wd=Wd; m.style.width=Wd+'px'; }   // Entry 380
+        if(m.classList.contains('pbmc-col')){ Wd=PBMC_DESKTOP.w; x.Wd=Wd; m.style.width=Wd+'px'; }   // Entry 384: desktop width kept; forced desktop height dropped (no dead space)
         x.Wd=Wd; x.sizer=sizer;
       });
       if(!NO_RERENDER_TABS.has(id)) _show(id);   // re-render the tab so charts lay out at the wider width
       wide.forEach(x=>{
-        const m=x.m, Wd=Math.max(x.Wd, m.scrollWidth); let H=m.offsetHeight;
+        const m=x.m, Wd=Math.max(x.Wd, m.scrollWidth);
+        // Entry 383: trim the Current Scoreboard's empty strip below its last axis label (restored on un-rotate).
+        const sgw=m.querySelector('#sg-wrap'), sgs=sgw && document.getElementById('sg-svg');
+        if(sgw && sgs && sgs.getBBox){ try{ const bb=sgs.getBBox(), vb=sgs.viewBox.baseVal, k=sgw.clientHeight/(vb.height||sgw.clientHeight);
+          const need=Math.ceil((bb.y+bb.height-vb.y)*k)+4;
+          if(need>40 && need<sgw.clientHeight){ sgw.dataset.rotSplit=sgw.getAttribute('style')||'-'; sgw.style.height=need+'px'; sgw.style.overflow='hidden';
+            const card=sgw.parentElement; card.dataset.rotSplit=card.getAttribute('style')||'-'; card.style.paddingBottom='6px'; } }catch(e){} }
+        let H=m.offsetHeight;
         // Entry 361: FIT tabs shrink each rotated section so ALL of it is visible on the turned screen —
         // its height fits the phone's short side (no swiping to reach the last rows/bars) and its
         // length fits the visible long side. Other tabs stay full size (s=1) and scroll.
         const wrapW=x.sizer.parentElement.clientWidth;
-        const s=!panelFits(id,m) ? 1 : panelHeightOnly(id,m) ? Math.min(1, wrapW/H) : Math.min(1, wrapW/H, (window.innerHeight-48)/Wd);
-        if(panelEqual(id,m) && H*s < wrapW-0.5){
+        const s=isFillPanel(m) ? wrapW/H   // Entry 382/383: fill the turned height exactly (may scale up)
+          : !panelFits(id,m) ? 1 : panelHeightOnly(id,m) ? Math.min(1, wrapW/H) : Math.min(1, wrapW/H, (window.innerHeight-48)/Wd);
+        if(panelEqual(id,m) && !isFillPanel(m) && H*s < wrapW-0.5){   // Entry 380/383: fill panels are scaled, not stretched
           // Entry 365: stretch to the shared height: flex column so the last block (the card) grows.
           m.style.display='flex'; m.style.flexDirection='column'; m.style.minHeight=(wrapW/s)+'px';
           const last=[...m.children].reverse().find(c=>getComputedStyle(c).display!=='none'&&c.offsetHeight>0); if(last){ last.dataset.rotFlexOrig=last.getAttribute('style')||'-'; last.style.flex='1 1 auto'; }
           H=wrapW/s;
         }
         m.style.width=Wd+'px';
-        m.style.transform='translateY('+(Wd*s)+'px) rotate(-90deg)'+(s<1?' scale('+s+')':'');
+        m.style.transform='translateY('+(Wd*s)+'px) rotate(-90deg)'+(Math.abs(s-1)>0.001?' scale('+s+')':'');   // Entry 382: scale up too
         x.sizer.style.width=(H*s)+'px'; x.sizer.style.height=(Wd*s)+'px';
       });
       document.querySelectorAll('.rot-wrap').forEach((w,i)=>{ if(sl0[i]) w.scrollLeft=sl0[i]; });
