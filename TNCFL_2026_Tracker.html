@@ -8867,6 +8867,8 @@ async function copyRecapPacket(){
       const m=w.querySelector('.rot-unit'); if(m){ m.style.cssText=m.dataset.rotOrigStyle||''; delete m.dataset.rotOrigStyle; m.classList.remove('rot-unit'); w.parentNode.insertBefore(m,w); }
       w.remove();
     });
+    // Entry 365: undo the equal-height stretch on cards.
+    document.querySelectorAll('[data-rot-flex-orig]').forEach(el=>{ const o=el.dataset.rotFlexOrig; if(o==='-') el.removeAttribute('style'); else el.setAttribute('style',o); delete el.dataset.rotFlexOrig; });
     // Entry 364: put split rows (e.g. Points Behind Money Circle | Despair Differential) back side by side.
     document.querySelectorAll('[data-rot-split]').forEach(r=>{ r.style.cssText=r.dataset.rotSplit==='-'?'':r.dataset.rotSplit; delete r.dataset.rotSplit; });
   }
@@ -8880,9 +8882,16 @@ async function copyRecapPacket(){
   // Entry 358: tabs where EVERY section rotates (Hanh: "rotate all the charts on the standings tab"),
   // not only the ones wider than the screen.
   const ROTATE_ALL_TABS=new Set(['standings','pickem','hmotw','money']);   // Entry 359: Pick'em too; Entry 361: HMOTW; Entry 362: Money
-  const FIT_TABS=new Set(['hmotw','standings']);   // Entry 361: rotated sections shrink to fit the turned screen entirely; Entry 364: Standings too
+  const FIT_TABS=new Set(['hmotw','standings','money']);   // Entry 368: Money too   // Entry 361: rotated sections shrink to fit the turned screen entirely; Entry 364: Standings too
   // Entry 364: sections made of side-by-side panels that rotate as SEPARATE panels, stacked (tab -> row selector).
   const SPLIT_ROWS={standings:'.pbmc-tdd-row'};
+  // Entry 365: on these tabs every turned panel is exactly the same height — the full short side of the
+  // turned screen. A panel that fits with room to spare is stretched (its card grows) to match.
+  const EQUAL_HEIGHT_TABS=new Set(['standings','hmotw','money']);   // Entry 367: HMOTW too; Entry 368: Money
+  // Entry 369: single panels (not a whole tab) that get the same fit + same-height treatment.
+  const FIT_PANELS={playoffs:'#bracket'};
+  const panelFits=(id,m)=>FIT_TABS.has(id) || !!(FIT_PANELS[id] && m.querySelector(FIT_PANELS[id]));
+  const panelEqual=(id,m)=>EQUAL_HEIGHT_TABS.has(id) || !!(FIT_PANELS[id] && m.querySelector(FIT_PANELS[id]));
   // Entry 359: Pick'em's chart/table size themselves to their container, and calling showTab('pickem')
   // again before its first load finishes would start a SECOND fetch — so no re-draw pass there.
   const NO_RERENDER_TABS=new Set(['pickem']);
@@ -8911,22 +8920,27 @@ async function copyRecapPacket(){
       wide.forEach(x=>{
         const m=x.m, Wd=Math.ceil(Math.max(x.need+8, Math.min(longSide, 900)));
         const wrap=document.createElement('div'); wrap.className='rot-wrap';
-        const note=document.createElement('div'); note.className='rot-note';
-        note.innerHTML='<span style="display:inline-block;transform:rotate(90deg)">⟳</span> Turn phone sideways ↻';
+        // Entry 366: the "Turn phone sideways" tag was removed (Hanh) — no label above rotated panels.
         const sizer=document.createElement('div'); sizer.className='rot-sizer';
-        m.parentNode.insertBefore(wrap,m); wrap.appendChild(note); wrap.appendChild(sizer); sizer.appendChild(m);
+        m.parentNode.insertBefore(wrap,m); wrap.appendChild(sizer); sizer.appendChild(m);
         m.dataset.rotOrigStyle=m.getAttribute('style')||'';
         m.style.width=Wd+'px'; m.style.maxWidth='none'; m.style.transform='none';   // Entry 364: max-width lifted (split panels have max-width:100%)
         x.Wd=Wd; x.sizer=sizer;
       });
       if(!NO_RERENDER_TABS.has(id)) _show(id);   // re-render the tab so charts lay out at the wider width
       wide.forEach(x=>{
-        const m=x.m, Wd=Math.max(x.Wd, m.scrollWidth), H=m.offsetHeight;
+        const m=x.m, Wd=Math.max(x.Wd, m.scrollWidth); let H=m.offsetHeight;
         // Entry 361: FIT tabs shrink each rotated section so ALL of it is visible on the turned screen —
         // its height fits the phone's short side (no swiping to reach the last rows/bars) and its
         // length fits the visible long side. Other tabs stay full size (s=1) and scroll.
         const wrapW=x.sizer.parentElement.clientWidth;
-        const s=FIT_TABS.has(id) ? Math.min(1, wrapW/H, (window.innerHeight-48)/Wd) : 1;
+        const s=panelFits(id,m) ? Math.min(1, wrapW/H, (window.innerHeight-48)/Wd) : 1;
+        if(panelEqual(id,m) && H*s < wrapW-0.5){
+          // Entry 365: stretch to the shared height: flex column so the last block (the card) grows.
+          m.style.display='flex'; m.style.flexDirection='column'; m.style.minHeight=(wrapW/s)+'px';
+          const last=[...m.children].reverse().find(c=>getComputedStyle(c).display!=='none'&&c.offsetHeight>0); if(last){ last.dataset.rotFlexOrig=last.getAttribute('style')||'-'; last.style.flex='1 1 auto'; }
+          H=wrapW/s;
+        }
         m.style.width=Wd+'px';
         m.style.transform='translateY('+(Wd*s)+'px) rotate(-90deg)'+(s<1?' scale('+s+')':'');
         x.sizer.style.width=(H*s)+'px'; x.sizer.style.height=(Wd*s)+'px';
@@ -8943,6 +8957,13 @@ async function copyRecapPacket(){
     unrotateAll();
     const r=_show.apply(this,arguments);
     IDS.forEach(t=>body.classList.toggle('tdw-tab-'+t, t===id));   // Entry 360: drives the phone-only money-circle rule
+    // Entry 368: on phones the Money tab's last panel ("Net Column — Path to $0.00") opens by default —
+    // once per page load, so collapsing it afterwards sticks. Desktop keeps it collapsed.
+    if(mqMobile.matches && id==='money' && !window._tdwZeroOpened){
+      window._tdwZeroOpened=true;
+      const zb=document.getElementById('zero-card-body'), zc=document.getElementById('zero-card-chevron');
+      if(zb && zb.style.display==='none'){ zb.style.display='block'; if(zc) zc.style.transform='rotate(180deg)'; }
+    }
     list.querySelectorAll('.tdw-item').forEach(b=>b.classList.toggle('active',b.dataset.tab===id));
     if(mqMobile.matches) applyRotation(id);
     return r;
