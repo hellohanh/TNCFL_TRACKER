@@ -2520,9 +2520,13 @@ function showGapTip(e, mgrName){
 }
 function hideGapTip(){document.getElementById('sbox-tip').style.opacity='0';}
 
+// Entry 403 (2026-10-20): phones show only ESPN's current week + 1 in the
+// Score Table, Weekly Burnout, Despair Differential and Scoring Spread
+// Index (Week 7 -> Weeks 1-8). Desktop always shows all 18 weeks.
+function phoneWeeks(){ return window.matchMedia('(max-width:820px)').matches ? Math.max(1, Math.min(18, (CURRENT_WK||0)+1)) : 18; }
 function renderStandings() {
   const el = document.getElementById('standings-tbl');
-  const SEASON_WKS = 18;
+  const SEASON_WKS = phoneWeeks();   // Entry 403
   const wkW = 46;
 
   const standWkLbl = document.getElementById('standings-wk-label');
@@ -3056,7 +3060,7 @@ function renderDDB() {
     return;
   }
   empty.style.display='none';
-  const SEASON_WKS=18, N=SEASON_WKS, ROWS=MANAGERS.length;
+  const SEASON_WKS=phoneWeeks(), N=SEASON_WKS, ROWS=MANAGERS.length;   // Entry 403
   const PAD_T=22, PAD_B=10;
   const H=Math.max(240, 30*ROWS+PAD_T+PAD_B);
   const svgEl = svg.parentElement;
@@ -3206,7 +3210,7 @@ function renderDespair2() {
     svg.innerHTML=''; empty.style.display=''; return;
   }
   empty.style.display='none';
-  const SEASON_WKS=18, N=SEASON_WKS;
+  const SEASON_WKS=phoneWeeks(), N=SEASON_WKS;   // Entry 403
   // Entry 176 (2026-09-10): AXIS_X (where the Y-axis line/labels sit) moved
   // left from the old PAD_L=52 to reclaim dead space on the card's left
   // edge. PAD_L is now the DATA start (where Week 1 plots) and is offset
@@ -3404,7 +3408,7 @@ function renderSpread2() {
     svg.innerHTML = ''; empty.style.display = ''; return;
   }
   empty.style.display = 'none';
-  const SEASON_WKS = 18, N = SEASON_WKS;
+  const SEASON_WKS = phoneWeeks(), N = SEASON_WKS;   // Entry 403
   const AXIS_X = 30, AXIS_GAP = 26, PAD_L = AXIS_X + AXIS_GAP, PAD_R = 64, PAD_T = 14, PAD_B = 24;
   const cardW = (svg.parentElement ? svg.parentElement.getBoundingClientRect().width : 0) || 660;
   const PW = Math.max(360, cardW);
@@ -8069,6 +8073,25 @@ function renderFAABChart(){
 }
 
 
+
+// Entry 401 (Hanh): on PHONES the weekly fee table shows 6 week rows at a time and scrolls for older weeks;
+// the column headers + TOTAL row stay pinned at the top and the projection row (Wks NN–17) at the bottom.
+// Desktop keeps showing every week. Height is measured from the real rows, so it works at any scale/rotation.
+const TX_VISIBLE_WEEKS = 6;
+function txLimitWeeksOnPhone(el) {
+  const wrap = el.querySelector('.tx-tbl-wrap'); if (!wrap) return;
+  if (!window.matchMedia('(max-width:820px)').matches) return;
+  const head = wrap.querySelector('thead'), total = wrap.querySelector('tr.tx-total'), proj = wrap.querySelector('tr.tx-proj');
+  const wks = [...wrap.querySelectorAll('tr.tx-wk')];
+  if (wks.length <= TX_VISIBLE_WEEKS) return;
+  const hh = head ? head.offsetHeight : 0, th = total ? total.offsetHeight : 0, ph = proj ? proj.offsetHeight : 0;
+  const rowsH = wks.slice(0, TX_VISIBLE_WEEKS).reduce((a, r) => a + r.offsetHeight, 0);
+  wrap.style.overflowY = 'auto'; wrap.style.overflowX = 'hidden';
+  wrap.style.maxHeight = (hh + th + rowsH + ph + 2) + 'px';
+  wrap.classList.add('tx-scroll');
+  if (total) total.querySelectorAll('td').forEach(td => { td.style.top = hh + 'px'; });
+}
+
 function renderTransactions(){
   const el = document.getElementById('transactions-content');
   if(!el) return;
@@ -8108,7 +8131,7 @@ function renderTransactions(){
   // new weeks get added above everything else as the season progresses,
   // pinning TOTAL here means its position never moves, unlike being a
   // tfoot row that would keep sliding down as more weeks appear above it.
-  let rows = '<tr style="background:var(--bg3);font-weight:700;border-bottom:2px solid var(--border);">'
+  let rows = '<tr class="tx-total" style="background:var(--bg3);font-weight:700;border-bottom:2px solid var(--border);">'
     +'<td style="text-align:center;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--text);">Total</td>'
     +'<td style="text-align:right;color:var(--mustard);">'+weekData.reduce((s,d)=>s+d.trans,0)+'</td>'
     +'<td style="text-align:right;color:var(--mustard);">$'+cumTransFees.toFixed(2)+'</td>'
@@ -8120,7 +8143,7 @@ function renderTransactions(){
   // ── Weekly table ── most recent week on top, per Hanh's request
   rows += [...weekData].reverse().map(d=>{
     const isCurrentWk = d.wk === maxWk;
-    return '<tr style="'+(isCurrentWk?'background:var(--bg3);':'')+'">'
+    return '<tr class="tx-wk" style="'+(isCurrentWk?'background:var(--bg3);':'')+'">'
       +'<td style="text-align:center;font-weight:'+(isCurrentWk?700:400)+';">WK '+String(d.wk).padStart(2,'0')+'</td>'
       +'<td class="trans-count-hover" data-wk="'+d.wk+'" style="text-align:right;cursor:'+(d.trans>0?'help':'default')+';">'+d.trans+'</td>'
       +'<td style="text-align:right;color:var(--mustard);">$'+d.transFees.toFixed(2)+'</td>'
@@ -8134,7 +8157,7 @@ function renderTransactions(){
   // look-ahead, conceptually after all real completed weeks regardless of
   // their own display order above). Effective range tops out at 17 (real
   // week 18, 0-indexed) same as the tracked weeks above.
-  rows += '<tr style="opacity:0.45;">'
+  rows += '<tr class="tx-proj" style="opacity:0.45;">'
     +'<td style="text-align:center;color:var(--text3);">WKS '+String(maxWk+1).padStart(2,'0')+'–'+String(SEASON_WKS-1).padStart(2,'0')+'</td>'
     +'<td style="text-align:right;color:var(--text3);">~'+avgTrans.toFixed(1)+'/wk</td>'
     +'<td style="text-align:right;color:var(--text3);">proj.</td>'
@@ -8175,12 +8198,13 @@ function renderTransactions(){
   +'</div>';
 
   // ── Table ──
-  const tableHTML = '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">'
+  const tableHTML = '<div class="tx-tbl-wrap" style="overflow-x:auto;border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">'
     +'<table class="ptbl" style="width:100%;font-size:12px;font-variant-numeric:tabular-nums;">'
     +thead+'<tbody>'+rows+'</tbody>'
     +'</table></div>';
 
   el.innerHTML = projCard + tableHTML;
+  txLimitWeeksOnPhone(el);   // Entry 401
   el.querySelectorAll('.trans-count-hover').forEach(td=>{
     const wk = Number(td.dataset.wk);
     if (!(FA_ACTIVITY[wk] || []).some(r=>r.success)) return; // nothing to show, leave unhoverable
@@ -8937,6 +8961,15 @@ async function copyRecapPacket(){
   /* Entry 397 (Hanh): Points Behind Money Circle — dot + name stay on one line (phones); the Name column takes the width it needs. */
   #pbmc-tbl td.pbmc-name{white-space:nowrap;}
   #pbmc-tbl table{table-layout:auto;}
+  /* Entry 401: pinned rows in the scrolling weekly fee table (phones) */
+  @media (orientation:portrait){ body.tdw-tab-transactions #fa-activity-content{height:437px;overflow-y:auto;overflow-x:hidden;} }   /* Entry 404: Waivers / FA Activity keeps its desktop size (1160x483: 46px header + 437px list) and scrolls inside, so text never shrinks as weeks are added or opened */
+  .tx-tbl-wrap.tx-scroll table.ptbl{overflow:visible;}   /* .ptbl's overflow:hidden would trap the sticky rows */
+  .tx-tbl-wrap.tx-scroll thead th{position:sticky;top:0;z-index:3;background:var(--bg3);}
+  .tx-tbl-wrap.tx-scroll tr.tx-total td{position:sticky;z-index:2;background:var(--bg3);}
+  .tx-tbl-wrap.tx-scroll tr.tx-proj td{position:sticky;bottom:0;z-index:2;background:var(--bg2);}
+  .tx-tbl-wrap.tx-scroll tr.tx-proj{opacity:1 !important;}
+  .tx-tbl-wrap.tx-scroll tr.tx-proj td,.tx-tbl-wrap.tx-scroll tr.tx-proj td *{color:#5f5f5f !important;}   /* solid cell, dim text (no see-through) */
+  .tx-tbl-wrap.tx-scroll tr.tx-proj td:first-child{z-index:3;overflow:visible;}   /* 'WKS 07–17' spills past its narrow column; keep it on top */
   .rot-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r-lg);padding:14px 18px;box-sizing:border-box;}   /* Entry 375 */
   .rot-wrap > .rot-sizer > .rot-unit{position:absolute;top:0;left:0;margin:0 !important;transform-origin:0 0;}
   .rot-note{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--mustard);margin:4px 0 6px;display:flex;align-items:center;gap:6px;}
@@ -9035,7 +9068,7 @@ async function copyRecapPacket(){
   // Entry 369: single panels (not a whole tab) that get the same fit + same-height treatment.
   const FIT_PANELS={playoffs:'#bracket', transactions:'.faab-card'};   // Entry 377: FAAB Budget
   // Entry 377 (Hanh): single panels that always rotate on phones, even when they fit the screen.
-  const FORCE_PANELS={transactions:'.faab-card'};
+  const FORCE_PANELS={transactions:'.faab-card, #transactions-content'};   // Entry 400: + Transactions fee summary/table
   // Entry 370 (Hanh): the Score Table fits by HEIGHT only — all 10 managers visible across the turned
   // screen, larger text; its length may run past the screen (swipe for later weeks).
   const HEIGHT_ONLY_PANELS={standings:'#standings-tbl, #sg-wrap', transactions:'.faab-card'};   // Entry 377: FAAB Budget too; Entry 379: Current Scoreboard (#sg-wrap)
@@ -9052,8 +9085,8 @@ async function copyRecapPacket(){
   const ROT_EDGE=15;
   // Entry 393 (Hanh, desktop-proportion rule): panels laid out at their DESKTOP width when turned, then scaled to fill the
   // turned height exactly (desktop width:height kept). selector inside the panel -> desktop width in px.
-  const DESKTOP_W_PANELS={'#standings-tbl':1160, '#sg-wrap':1160, '#ddb-svg':1160, '#despair-svg2':796, '#spread-svg2':1160};   // Entry 394: + Current Scoreboard; 395: + Weekly Burnout; 396: + Despair Differential; 398: + Scoring Spread Index
-  const desktopWFor=m=>{ for(const k in DESKTOP_W_PANELS){ if(m.querySelector(k)) return DESKTOP_W_PANELS[k]; } return 0; };
+  const DESKTOP_W_PANELS={'#standings-tbl':()=>1160-(18-phoneWeeks())*54, '#sg-wrap':1160, '#ddb-svg':()=>1160-Math.round((18-phoneWeeks())*989/17), '#despair-svg2':()=>796-Math.round((18-phoneWeeks())*642/17), '#spread-svg2':()=>1160-Math.round((18-phoneWeeks())*1006/17), '.faab-card':696, '#transactions-content':705, '#fa-activity-content':1160};   /* Entry 404: + Waivers / FA Activity */   /* Entry 402: summary cards 60% of desktop (379->227px) and the table matched to their combined width: 3*227 + 2*12 gap = 705 */   /* Entry 399: + FAAB Budget (card's desktop width) */   // Entry 394: + Current Scoreboard; 395: + Weekly Burnout; 396: + Despair Differential; 398: + Scoring Spread Index
+  const desktopWFor=m=>{ for(const k in DESKTOP_W_PANELS){ if(m.querySelector(k)){ const v=DESKTOP_W_PANELS[k]; return typeof v==='function'?v():v; } }   /* Entry 403: week-limited panels narrow by the desktop per-week spacing */ return 0; };
   // Entry 383 (Hanh): panels that FILL the turned screen height exactly (scaling up if needed) and are never
   // stretched — the money-circle card and the Current Scoreboard (whose empty strip under the chart is trimmed).
   const isFillPanel=m=>m.id==='money-circle-card' || !!m.querySelector('#sg-wrap') || m.classList.contains('pbmc-col') || desktopWFor(m)>0;   // Entry 384: + PBMC; Entry 393: + desktop-width panels   // Entry 373: Points Behind Money Circle panel size on a desktop monitor   // Entry 372: High Man stage width:height on a desktop monitor
