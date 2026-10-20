@@ -714,6 +714,9 @@ tfoot .grp-gap{background:var(--bg3)!important;}
     <div id="recap-theme-block" style="display:none;">
       <div class="recap-section-label">Pick a theme</div>
       <select id="recap-theme-select" class="recap-theme-select"></select>
+      <!-- Entry 389 (Hanh): free-text theme suggestion; when filled it replaces the dropdown pick in the packet. -->
+      <div class="recap-section-label" style="margin-top:12px;">Or suggest your own theme</div>
+      <input id="recap-theme-custom" class="recap-textarea" type="text" maxlength="80" placeholder="Type a theme (overrides the pick above)" style="min-height:0;height:38px;resize:none;">
     </div>
     <div class="recap-section-label">Additional talking points (optional)</div>
     <textarea id="recap-freetext" class="recap-textarea" placeholder="Anything else worth mentioning..."></textarea>
@@ -8678,9 +8681,16 @@ function selectRecapStory(i){
   // Filtered against THEMES_USED_2026 at render time, not baked into the map.
   const candidates = (STORYLINE_THEME_MAP[RECAP_SELECTED_STORY.key] || [])
     .filter(t => !THEMES_USED_2026.includes(t));
-  themeSel.innerHTML = candidates.length
-    ? candidates.map(t => `<option value="${t}">${t}</option>`).join('')
-    : '<option value="">(no unused themes mapped to this storyline — pick manually)</option>';
+  // Entry 390 (Hanh): always offer 7 themes — the storyline's mapped ones first, then random other unused
+  // themes from THEME_BANK to make 7 (never one already used this season).
+  const RECAP_THEME_COUNT = 7;
+  const fits = candidates.slice(0, RECAP_THEME_COUNT);
+  const pool = THEME_BANK.filter(t => !THEMES_USED_2026.includes(t) && !fits.includes(t));
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  const more = pool.slice(0, RECAP_THEME_COUNT - fits.length);
+  const opt = t => `<option value="${t}">${t}</option>`;
+  themeSel.innerHTML = (fits.length ? `<optgroup label="Fits this storyline">${fits.map(opt).join('')}</optgroup>` : '')
+    + (more.length ? `<optgroup label="More ideas">${more.map(opt).join('')}</optgroup>` : '');
   themeBlock.style.display = '';
 }
 
@@ -8690,7 +8700,8 @@ async function copyRecapPacket(){
   if (!wk) { status.textContent = 'No week selected.'; status.style.color = 'var(--text3)'; return; }
   if (!RECAP_SELECTED_STORY) { status.textContent = 'Pick a focal storyline first.'; status.style.color = '#e8686d'; return; }
 
-  const theme = document.getElementById('recap-theme-select').value || '(none picked)';
+  const customTheme = (document.getElementById('recap-theme-custom').value || '').trim();   // Entry 389
+  const theme = customTheme ? customTheme + ' (commissioner suggestion)' : (document.getElementById('recap-theme-select').value || '(none picked)');
   const freetext = document.getElementById('recap-freetext').value.trim();
   const allStories = RECAP_CURRENT_STORIES.map(s => '- ' + s.label).join('\n');
   // Entry 270 (session S048): computed, week-scoped — replaces the old
