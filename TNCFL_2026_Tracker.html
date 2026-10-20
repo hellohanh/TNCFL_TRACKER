@@ -8262,6 +8262,17 @@ function setFASort(w, key){
   renderFAActivity();
 }
 
+// Entry 406 (2026-10-20): on phones the Claim column is sized to the longest claim (bold 12px + cell
+// padding) instead of 36% of the desktop table; the other five columns keep their desktop pixel widths
+// and the panel narrows by the space saved. Desktop unchanged.
+const FA_COL_PX = [104, 127, 0, 116, 208, 185];   // desktop px of Team, Type, (Claim), Offer, Result, Date at 1160
+function faClaimColW(){
+  const c=faClaimColW._c||(faClaimColW._c=document.createElement('canvas').getContext('2d'));
+  c.font='700 12px '+getComputedStyle(document.body).fontFamily;
+  let w=0; Object.values(FA_ACTIVITY).forEach(rows=>(rows||[]).forEach(r=>{ w=Math.max(w, c.measureText(r.player||'').width); }));
+  return Math.max(120, Math.ceil(w)+28);   // 20px cell padding + a little air; never narrower than the header
+}
+function faPhoneTableW(){ return FA_COL_PX.reduce((a,b)=>a+b,0)+faClaimColW(); }
 function renderFAActivity() {
   const el = document.getElementById('fa-activity-content');
   if(!el) return;
@@ -8281,6 +8292,7 @@ function renderFAActivity() {
     {key:'date',   label:'Date'},
   ];
 
+  const faPhone = window.matchMedia('(max-width:820px)').matches;   // Entry 406
   // Build collapsible week cards, newest first
   let html = '';
   for(let w = maxWk; w >= 0; w--){
@@ -8375,8 +8387,11 @@ function renderFAActivity() {
       // Body
       + '<div style="display:'+(isOpen?'block':'none')+';">'
         + '<div style="overflow-x:auto;">'
-        + '<table class="fa-tbl" style="width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;min-width:720px;">'
-        + '<colgroup><col style="width:9%;"><col style="width:11%;"><col style="width:36%;"><col style="width:10%;"><col style="width:18%;"><col style="width:16%;"></colgroup>'
+        + (faPhone
+          ? '<table class="fa-tbl" style="width:'+faPhoneTableW()+'px;font-size:12px;border-collapse:collapse;table-layout:fixed;">'
+            + '<colgroup>'+FA_COL_PX.map((px,i)=>'<col style="width:'+(i===2?faClaimColW():px)+'px;">').join('')+'</colgroup>'   // Entry 406
+          : '<table class="fa-tbl" style="width:100%;font-size:12px;border-collapse:collapse;table-layout:fixed;min-width:720px;">'
+            + '<colgroup><col style="width:9%;"><col style="width:11%;"><col style="width:36%;"><col style="width:10%;"><col style="width:18%;"><col style="width:16%;"></colgroup>')
         + '<thead><tr style="background:var(--bg2);">'
           + headCells
         + '</tr></thead>'
@@ -8963,6 +8978,7 @@ async function copyRecapPacket(){
   #pbmc-tbl table{table-layout:auto;}
   /* Entry 401: pinned rows in the scrolling weekly fee table (phones) */
   @media (orientation:portrait){ body.tdw-tab-transactions #fa-activity-content{height:437px;overflow-y:auto;overflow-x:hidden;} }   /* Entry 404: Waivers / FA Activity keeps its desktop size (1160x483: 46px header + 437px list) and scrolls inside, so text never shrinks as weeks are added or opened */
+  #drought-card .db-name{flex-basis:52px;}   /* Entry 407: name column 43 -> 52px so the longest name (Damian) fits on phones, whose fonts can run wider; no ellipsis */
   .tx-tbl-wrap.tx-scroll table.ptbl{overflow:visible;}   /* .ptbl's overflow:hidden would trap the sticky rows */
   .tx-tbl-wrap.tx-scroll thead th{position:sticky;top:0;z-index:3;background:var(--bg3);}
   .tx-tbl-wrap.tx-scroll tr.tx-total td{position:sticky;z-index:2;background:var(--bg3);}
@@ -9085,8 +9101,8 @@ async function copyRecapPacket(){
   const ROT_EDGE=15;
   // Entry 393 (Hanh, desktop-proportion rule): panels laid out at their DESKTOP width when turned, then scaled to fill the
   // turned height exactly (desktop width:height kept). selector inside the panel -> desktop width in px.
-  const DESKTOP_W_PANELS={'#standings-tbl':()=>1160-(18-phoneWeeks())*54, '#sg-wrap':1160, '#ddb-svg':()=>1160-Math.round((18-phoneWeeks())*989/17), '#despair-svg2':()=>796-Math.round((18-phoneWeeks())*642/17), '#spread-svg2':()=>1160-Math.round((18-phoneWeeks())*1006/17), '.faab-card':696, '#transactions-content':705, '#fa-activity-content':1160};   /* Entry 404: + Waivers / FA Activity */   /* Entry 402: summary cards 60% of desktop (379->227px) and the table matched to their combined width: 3*227 + 2*12 gap = 705 */   /* Entry 399: + FAAB Budget (card's desktop width) */   // Entry 394: + Current Scoreboard; 395: + Weekly Burnout; 396: + Despair Differential; 398: + Scoring Spread Index
-  const desktopWFor=m=>{ for(const k in DESKTOP_W_PANELS){ if(m.querySelector(k)){ const v=DESKTOP_W_PANELS[k]; return typeof v==='function'?v():v; } }   /* Entry 403: week-limited panels narrow by the desktop per-week spacing */ return 0; };
+  const DESKTOP_W_PANELS={'#standings-tbl':()=>1160-(18-phoneWeeks())*54, '#sg-wrap':1160, '#ddb-svg':()=>1160-Math.round((18-phoneWeeks())*989/17), '#despair-svg2':()=>796-Math.round((18-phoneWeeks())*642/17), '#spread-svg2':()=>1160-Math.round((18-phoneWeeks())*1006/17), '.faab-card':696, '#transactions-content':705, '#fa-activity-content':()=>faPhoneTableW()+2, '#crown-card':481, '#drought-card':665, '#peak-card':1160};   /* Entry 405: + HMOTW (High Man / Thirsting for a W split from one desktop row; Peak Performance) */   /* Entry 404: + Waivers / FA Activity */   /* Entry 402: summary cards 60% of desktop (379->227px) and the table matched to their combined width: 3*227 + 2*12 gap = 705 */   /* Entry 399: + FAAB Budget (card's desktop width) */   // Entry 394: + Current Scoreboard; 395: + Weekly Burnout; 396: + Despair Differential; 398: + Scoring Spread Index
+  const desktopWFor=m=>{ for(const k in DESKTOP_W_PANELS){ if(m.matches(k) || m.querySelector(k)){ const v=DESKTOP_W_PANELS[k]; return typeof v==='function'?v():v; } }   /* Entry 403: week-limited panels narrow by the desktop per-week spacing */ return 0; };
   // Entry 383 (Hanh): panels that FILL the turned screen height exactly (scaling up if needed) and are never
   // stretched — the money-circle card and the Current Scoreboard (whose empty strip under the chart is trimmed).
   const isFillPanel=m=>m.id==='money-circle-card' || !!m.querySelector('#sg-wrap') || m.classList.contains('pbmc-col') || desktopWFor(m)>0;   // Entry 384: + PBMC; Entry 393: + desktop-width panels   // Entry 373: Points Behind Money Circle panel size on a desktop monitor   // Entry 372: High Man stage width:height on a desktop monitor
@@ -9151,6 +9167,11 @@ async function copyRecapPacket(){
         x.Wd=Wd; x.sizer=sizer;
       });
       if(!NO_RERENDER_TABS.has(id)) _show(id);   // re-render the tab so charts lay out at the wider width
+      // Entry 405: High Man and Thirsting for a W share one desktop row, so the shorter card stretches to the
+      // taller one (481x341 / 665x341). Keep that desktop height when they are turned. Restored on un-rotate.
+      { const cc=document.getElementById('crown-card'), dc=document.getElementById('drought-card');
+        if(cc && dc && cc.classList.contains('rot-unit') && dc.classList.contains('rot-unit')){
+          const h=Math.max(cc.offsetHeight, dc.offsetHeight); [cc,dc].forEach(c=>{ if(c.offsetHeight<h) c.style.minHeight=h+'px'; }); } }
       wide.forEach(x=>{
         const m=x.m, Wd=Math.max(x.Wd, m.scrollWidth);
         // Entry 383: trim the Current Scoreboard's empty strip below its last axis label (restored on un-rotate).
