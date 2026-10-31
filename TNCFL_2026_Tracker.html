@@ -358,6 +358,14 @@ table.score th.bye-wk.sortable:hover{background:rgba(100,180,255,0.28);}
 /* Entry 387: football toggle in each recap card header */
 .recap-td-btn{background:none;border:1px solid transparent;border-radius:8px;padding:3px 5px;cursor:pointer;display:flex;align-items:center;opacity:0.75;transition:opacity .15s,border-color .15s,background .15s;}
 .recap-td-btn:hover{opacity:1;}
+/* Entry 417 (Hanh): recap text-size chip (− | +) left of the football, every card, desktop + phones */
+.recap-fz{display:inline-flex;align-items:center;border:1px solid var(--border);border-radius:99px;overflow:hidden;background:rgba(255,255,255,0.03);}
+.recap-fz button{background:none;border:0;color:var(--text2);width:28px;height:24px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;}
+.recap-fz button:hover{color:var(--text);background:rgba(255,255,255,0.06);}
+.recap-fz button:disabled{opacity:.3;cursor:default;background:none;}
+.recap-fz svg{display:block;}
+.recap-fz .sep{width:1px;height:14px;background:var(--border);}
+#recap-cards .recap-body{font-size:var(--recap-fs,15px);}
 .recap-td-btn.on{opacity:1;border-color:rgba(217,165,33,0.55);background:rgba(217,165,33,0.12);}
 .recap-td{background:rgba(0,0,0,0.18);border:1px solid var(--border);border-radius:var(--r);padding:8px 6px 4px;}
 .recap-td-title{font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--mustard);padding:2px 6px 6px;}
@@ -6847,6 +6855,7 @@ function renderRecap() {
           ${r.title ? `<div class="recap-title" style="margin-bottom:0;${ac ? 'color:' + ac.text + ';' : ''}">${r.title}</div>` : ''}
         </div>
         <div style="display:flex;align-items:center;gap:10px;flex-shrink:0;">
+          ${recapFzChip()}
           ${r.week > 0 ? `<button class="recap-td-btn${RECAP_TD_OPEN.has(r.week) ? ' on' : ''}" id="recap-td-btn-${r.week}" title="Touchdowns this week" aria-label="Show touchdowns" onclick="event.stopPropagation(); toggleRecapTd(${r.week})">${RECAP_FOOTBALL_SVG}</button>` : ''}
           <div class="wk-chevron${RECAP_OPEN.has(r.week) ? ' open' : ''}" id="recap-chev-${r.week}">▼</div>
         </div>
@@ -6856,6 +6865,29 @@ function renderRecap() {
       <div class="recap-body" id="recap-body-${r.week}" style="display:${RECAP_OPEN.has(r.week) ? '' : 'none'};margin-top:10px;">${r.body}</div>
     </div>
   `; }).join('');
+  wrap.style.setProperty('--recap-fs', RECAP_FS + 'px');   // Entry 417
+}
+
+// Entry 417 (Hanh, 2026-10-31): text-size chip (− | reset | +) on every recap card, left of the football. One shared size for
+// all cards; 2px steps from 13 to 21 (default 15); starts at the default on every page load (not remembered).
+const RECAP_FS_DEFAULT = 15, RECAP_FS_MIN = 13, RECAP_FS_MAX = 21;
+let RECAP_FS = RECAP_FS_DEFAULT;   // middle reset button (Hanh) returns to the default
+function recapFzChip() {
+  const ico = d => `<svg viewBox="0 0 10 10" width="10" height="10" aria-hidden="true"><path d="${d}" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+  return `<div class="recap-fz" title="Text size" onclick="event.stopPropagation()">`
+    + `<button class="recap-fz-dn" aria-label="Smaller text" onclick="event.stopPropagation(); setRecapFs(-2)"${RECAP_FS <= RECAP_FS_MIN ? ' disabled' : ''}>${ico('M1 5H9')}</button>`
+    + `<span class="sep"></span>`
+    + `<button class="recap-fz-rs" aria-label="Reset text size" title="Reset text size" onclick="event.stopPropagation(); setRecapFs(0, true)"${RECAP_FS === RECAP_FS_DEFAULT ? ' disabled' : ''}><svg viewBox="0 0 12 12" width="11" height="11" aria-hidden="true"><path d="M2.2 6.6A3.9 3.9 0 1 0 3.4 3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/><path d="M1.6 1.4V4.2H4.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>`
+    + `<span class="sep"></span>`
+    + `<button class="recap-fz-up" aria-label="Larger text" onclick="event.stopPropagation(); setRecapFs(2)"${RECAP_FS >= RECAP_FS_MAX ? ' disabled' : ''}>${ico('M1 5H9M5 1V9')}</button></div>`;
+}
+function setRecapFs(d, reset) {
+  RECAP_FS = reset ? RECAP_FS_DEFAULT : Math.max(RECAP_FS_MIN, Math.min(RECAP_FS_MAX, RECAP_FS + d));
+  const wrap = document.getElementById('recap-cards');
+  if (wrap) wrap.style.setProperty('--recap-fs', RECAP_FS + 'px');
+  document.querySelectorAll('.recap-fz-dn').forEach(b => { b.disabled = RECAP_FS <= RECAP_FS_MIN; });
+  document.querySelectorAll('.recap-fz-up').forEach(b => { b.disabled = RECAP_FS >= RECAP_FS_MAX; });
+  document.querySelectorAll('.recap-fz-rs').forEach(b => { b.disabled = RECAP_FS === RECAP_FS_DEFAULT; });
 }
 
 // Entry 386 (Hanh, 2026-10-16): every weekly recap card starts COLLAPSED (phones and desktop); click the
