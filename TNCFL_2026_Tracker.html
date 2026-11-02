@@ -132,6 +132,15 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pickem-table th.pk-off{overflow:visible;}
 .pickem-table th.pk-off,.pickem-table td.pk-off{padding-left:0 !important;padding-right:0 !important;}
 .pickem-table td.pk-off > *{visibility:hidden;}
+/* Entry 423 (Hanh): "Show games" chips — hide/show every Sunday-morning or Sunday-afternoon game at once */
+.pk-ses{display:flex;align-items:center;gap:8px;margin:0 0 10px;flex-wrap:wrap;}
+.pk-ses .lbl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--text3);margin-right:2px;}
+.pk-ses button{all:unset;box-sizing:border-box;cursor:pointer;display:inline-flex;align-items:center;gap:7px;padding:5px 11px 5px 8px;border:1px solid var(--border);border-radius:99px;font-size:11px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text3);}
+.pk-ses button svg{display:block;}
+.pk-ses button .dot{display:none;}
+.pk-ses button.on{color:var(--mustard);border-color:rgba(217,165,33,.45);background:rgba(217,165,33,.08);}
+.pk-ses button.on .dot{display:inline;}
+.pk-ses .cnt{color:var(--text3);font-weight:600;letter-spacing:0;}
 .pickem-table .pk-filter-icon{margin-left:5px;font-size:9px;opacity:0.45;cursor:pointer;display:inline-block;}
 .pickem-table .pk-filter-icon:hover{opacity:0.9;}
 .pickem-table .pk-filter-icon.active{opacity:1;color:var(--mustard);}
@@ -1127,6 +1136,7 @@ tfoot .grp-gap{background:var(--bg3)!important;}
         <div class="wk-collapse-body open" id="pickem-standings-body">
           <div style="font-size:11px;color:var(--text3);margin-bottom:12px;">ESPN NFL Pick'em group — every column is independently sortable, click any header to sort by it (click again to reverse). Green check = correct pick, red X = incorrect, blank = not yet played.</div>
           <div id="pickem-table-status" style="font-size:12px;color:var(--text3);padding:20px 0;">Loading…</div>
+          <div id="pickem-ses" class="pk-ses" style="display:none;"></div>
           <div id="pickem-table-wrap" class="pickem-table-wrap" style="display:none;"></div>
         </div>
       </div>
@@ -7385,7 +7395,12 @@ function renderPickemTable() {
   let headHtml = `<th class="${sortedClass('entry')}" onclick="sortPickemTable('entry')">Entry <span class="arrow">${arrow('entry')}</span>${pickemFilterIconHtml('entry')}</th>`;
   headHtml += `<th style="text-align:center;" class="${sortedClass('ovr')}" onclick="sortPickemTable('ovr')">OVR <span class="arrow">${arrow('ovr')}</span>${pickemFilterIconHtml('ovr')}</th>`;
   headHtml += `<th style="text-align:center;" class="${sortedClass('pts')}" onclick="sortPickemTable('pts')">Pts <span class="arrow">${arrow('pts')}</span>${pickemFilterIconHtml('pts')}</th>`;
-  data.matchups.forEach((m, i) => {
+  // Entry 423 (Hanh): hidden games move to the end (before Tie Break) and return to their original place when
+  // shown again. ORDER = shown games in ESPN's kickoff order, then hidden ones in that same order; sorting still
+  // uses each game's original index (matchup:i).
+  const ORDER = data.matchups.map((m, i) => i).filter(i => !PICKEM_HIDDEN.has(data.matchups[i].name))
+    .concat(data.matchups.map((m, i) => i).filter(i => PICKEM_HIDDEN.has(data.matchups[i].name)));
+  ORDER.forEach(i => { const m = data.matchups[i];
     const colId = 'matchup:' + i;
     const parts = String(m.name).split(' @ ');
     const away = parts[0] || '', home = parts[1] || '';
@@ -7414,7 +7429,7 @@ function renderPickemTable() {
       `</td>`;
     cells += `<td class="pk-ovr">${row.ovr}</td>`;
     cells += `<td class="pk-pts">${row.pts}</td>`;
-    row.picks.forEach((pick, i) => { const off = PICKEM_HIDDEN.has((data.matchups[i] || {}).name); cells += `<td class="pk-pick-td${off ? ' pk-off' : ''}">${pickemPickCellHtml(pick)}</td>`; });   // Entry 422
+    ORDER.forEach(i => { const pick = row.picks[i]; const off = PICKEM_HIDDEN.has((data.matchups[i] || {}).name); cells += `<td class="pk-pick-td${off ? ' pk-off' : ''}">${pickemPickCellHtml(pick)}</td>`; });   // Entry 422/423
     // Entry 315: "—" for no tiebreak submission this week, matching ESPN's
     // own "--" and this table's existing dash convention for missing picks.
     cells += `<td class="pk-tie">${row.tie != null ? row.tie : '<span class="pk-dash">—</span>'}</td>`;
@@ -7432,14 +7447,72 @@ function renderPickemTable() {
   // 5%, folded into Entry) and Tie Break added at the end.
   const n = data.matchups.length || 1;
   const entryPct = 18, ovrPct = 6, ptsPct = 6, tiePct = 7;
-  // Entry 422: hidden games get a fixed 18px strip; the shown games split the matchup share between them.
+  // Entry 422: hidden games get an 18px strip; the shown games split the matchup share between them.
+  // Entry 423: the strip is a percentage of the table width (not a fixed px mixed with %) so Entry/OVR/Pts/Tie
+  // keep their full widths however many games are hidden (with px strips the fixed layout squeezed OVR/Pts).
   const nOff = data.matchups.filter(m => PICKEM_HIDDEN.has(m.name)).length;
-  const matchupPct = (100 - entryPct - ovrPct - ptsPct - tiePct) / ((n - nOff) || 1);
+  const tw = (wrap && wrap.clientWidth) || 1126;
+  const offPct = 18 / tw * 100;
+  const matchupPct = (100 - entryPct - ovrPct - ptsPct - tiePct - offPct * nOff) / ((n - nOff) || 1);
   let colgroupHtml = `<col style="width:${entryPct}%"><col style="width:${ovrPct}%"><col style="width:${ptsPct}%">`;
-  for (let i = 0; i < n; i++) colgroupHtml += PICKEM_HIDDEN.has((data.matchups[i] || {}).name) ? `<col style="width:18px">` : `<col style="width:${matchupPct}%">`;
+  ORDER.forEach(i => { colgroupHtml += PICKEM_HIDDEN.has((data.matchups[i] || {}).name) ? `<col style="width:${offPct}%">` : `<col style="width:${matchupPct}%">`; });
   colgroupHtml += `<col style="width:${tiePct}%">`;
 
   wrap.innerHTML = `<table class="pickem-table"><colgroup>${colgroupHtml}</colgroup><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
+  renderPickemSessions(data);   // Entry 423
+}
+
+// Entry 423 (Hanh, 2026-11-02): "Show games" chips — Sun Morning / Sun Afternoon hide or show every game of
+// that session at once (same 18px strips as the single-game circles, which keep working on their own). A chip
+// shows a dot only while every game in its session is shown. Kickoff times come from ESPN's NFL scoreboard for
+// the Pick'em week (fetched once per week, matched to each game by its two team abbreviations), split with
+// Weekly Movement's rule (slotNameFor: Sun before 4pm ET = SUN_MOR, 4pm-7pm = SUN_AFT). No worker change.
+const PICKEM_SLOTS = {};        // week -> { 'AWAY @ HOME': 'SUN_MOR' | 'SUN_AFT' | ... }
+const PICKEM_SLOTS_PENDING = {};
+function pickemLoadSlots(week) {
+  if (!week || PICKEM_SLOTS[week] || PICKEM_SLOTS_PENDING[week]) return;
+  PICKEM_SLOTS_PENDING[week] = true;
+  fetch(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard?seasontype=2&week=${week}`)
+    .then(r => r.ok ? r.json() : null).then(j => {
+      const byTeams = {};
+      ((j && j.events) || []).forEach(e => {
+        const comp = (e.competitions || [])[0] || {};
+        const abbr = (comp.competitors || []).map(c => c.team && c.team.abbreviation).filter(Boolean).sort().join('|');
+        if (abbr && e.date) { const et = etPartsFor(e.date); byTeams[abbr] = slotNameFor(et.etDay, et.etHour); }
+      });
+      const out = {};
+      const d = PICKEM_TABLE_DATA;
+      if (d && d.week == week) d.matchups.forEach(m => {
+        const key = String(m.name).split(' @ ').map(x => x.trim()).sort().join('|');
+        if (byTeams[key]) out[m.name] = byTeams[key];
+      });
+      PICKEM_SLOTS[week] = out;
+      if (Object.keys(out).length && PICKEM_TABLE_DATA && PICKEM_TABLE_DATA.week == week) renderPickemTable();   // full render: on phones it re-fits the turned panel
+    }).catch(() => {}).finally(() => { delete PICKEM_SLOTS_PENDING[week]; });
+}
+function renderPickemSessions(data) {
+  const el = document.getElementById('pickem-ses'), body = document.getElementById('pickem-standings-body');
+  if (!el || !data) return;
+  const slots = PICKEM_SLOTS[data.week];
+  if (!slots) { el.style.display = 'none'; if (body) body.classList.remove('has-ses'); pickemLoadSlots(data.week); return; }
+  const eye = '<svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true"><circle cx="7" cy="7" r="5.75" fill="none" stroke="currentColor" stroke-width="1.5"/><circle class="dot" cx="7" cy="7" r="2.5" fill="currentColor"/></svg>';
+  const chips = [['SUN_MOR', 'Sun Morning'], ['SUN_AFT', 'Sun Afternoon']].map(([slot, label]) => {
+    const games = data.matchups.filter(m => slots[m.name] === slot).map(m => m.name);
+    if (!games.length) return '';
+    const allShown = games.every(g => !PICKEM_HIDDEN.has(g));
+    return `<button class="${allShown ? 'on' : ''}" aria-pressed="${allShown}" title="${allShown ? 'Hide' : 'Show'} all ${label.toLowerCase()} games" onclick="pickemToggleSession('${slot}')">${eye}${label} <span class="cnt">(${games.length})</span></button>`;
+  }).join('');
+  el.innerHTML = chips ? `<span class="lbl">Show games</span>${chips}` : '';
+  el.style.display = chips ? '' : 'none';
+  if (body) { body.classList.toggle('has-ses', !!chips); body.style.setProperty('--pk-ses-h', chips ? (el.offsetHeight + 10) + 'px' : '0px'); }
+}
+function pickemToggleSession(slot) {
+  const data = PICKEM_TABLE_DATA, slots = data && PICKEM_SLOTS[data.week];
+  if (!slots) return;
+  const games = data.matchups.filter(m => slots[m.name] === slot).map(m => m.name);
+  const allShown = games.every(g => !PICKEM_HIDDEN.has(g));
+  games.forEach(g => allShown ? PICKEM_HIDDEN.add(g) : PICKEM_HIDDEN.delete(g));
+  renderPickemTable();
 }
 
 // Distinct-hue color generator for however many entries exist (30 here) —
@@ -9120,7 +9193,7 @@ body.tdw-tablet .tdw-layout{display:flex;flex-direction:column;gap:6px;padding:1
   #pbmc-tbl td.pbmc-name{white-space:nowrap;}
   #pbmc-tbl table{table-layout:auto;}
   /* Entry 401: pinned rows in the scrolling weekly fee table (phones) */
-  @media (orientation:portrait){ body.tdw-tab-pickem #pickem-table-wrap{height:370px;overflow-y:auto;overflow-x:auto;} body.tdw-tab-pickem #pickem-table-wrap thead th{z-index:5;} }   /* Entry 412: Pick'em Standings at desktop width (1160) and a fixed 483px panel height (header row + about 5 managers); the rest scroll under the sticky header, lifted above the pick logos (z-index 2) so they don't show through */
+  @media (orientation:portrait){ body.tdw-tab-pickem #pickem-table-wrap{height:370px;overflow-y:auto;overflow-x:auto;} body.tdw-tab-pickem #pickem-table-wrap thead th{z-index:5;} body.tdw-tab-pickem #pickem-standings-body.has-ses #pickem-table-wrap{height:calc(370px - var(--pk-ses-h,0px));} }   /* Entry 423: the Show-games row takes its height out of the table so the panel stays 483 */   /* Entry 412: Pick'em Standings at desktop width (1160) and a fixed 483px panel height (header row + about 5 managers); the rest scroll under the sticky header, lifted above the pick logos (z-index 2) so they don't show through */
   @media (orientation:portrait){ body.tdw-tab-draft .draft-board{height:441px;overflow-y:auto;overflow-x:auto;} }   /* Entry 411: Draft Board keeps its desktop width (1160) at a fixed 483px panel height (42px heading + 441px board, about 7 rounds), same size as Waivers / FA Activity; rounds scroll inside under the sticky manager row */
   @media (orientation:portrait){ body.tdw-tab-transactions #fa-activity-content{height:437px;overflow-y:auto;overflow-x:auto;} }   /* Entry 410: overflow-x auto, not hidden: on a turned scroller, hidden makes Chrome drop touch swipes along it. Entry 404: Waivers / FA Activity keeps its desktop size (1160x483: 46px header + 437px list) and scrolls inside, so text never shrinks as weeks are added or opened */
   #zero-card-body .zero-intro{display:block;}   /* Entry 414 (Hanh): the Net Column intro reads as one wrapping paragraph on phones (it's a flex .sr-row, which split it into columns) */
