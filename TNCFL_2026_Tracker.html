@@ -8988,6 +8988,39 @@ async function copyRecapPacket(){
         In landscape everything shows normally. Tall rotated sections scroll, never shrink. -->
 <style>
 #tdw-handle,#tdw-panel,#tdw-scrim{display:none;}
+/* Entry 420 (Hanh, 2026-11-02): tablets (touch-only, wider than 820px) get the same drawer in DESKTOP view too,
+   so the Mobile/Desktop layout toggle at its top is always reachable. Same rules as the phone drawer below. */
+  body.tdw-tablet #tdw-handle{display:flex;position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:9000;
+    width:22px;height:84px;padding-left:4px;align-items:center;justify-content:center;
+    background:transparent;touch-action:none;cursor:pointer;-webkit-tap-highlight-color:transparent;}
+  body.tdw-tablet #tdw-handle .tdw-pill{width:10px;height:72px;border-radius:8px 0 0 8px;background:var(--mustard);
+    box-shadow:-2px 0 10px rgba(217,165,33,.45);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;}
+  body.tdw-tablet #tdw-handle .tdw-pill i{display:block;width:4px;height:4px;border-radius:50%;background:rgba(0,0,0,.55);}
+  body.tdw-tablet #tdw-scrim{display:block;position:fixed;inset:0;z-index:9001;background:rgba(0,0,0,.55);opacity:0;pointer-events:none;transition:opacity .22s;}
+  body.tdw-tablet #tdw-panel{display:flex;flex-direction:column;position:fixed;top:0;right:0;bottom:0;z-index:9002;width:min(250px,72vw);
+    background:var(--bg2);border-left:3px solid var(--mustard);box-shadow:-8px 0 24px rgba(0,0,0,.6);
+    transform:translateX(105%);transition:transform .22s ease;touch-action:pan-y;}
+  body.tdw-tablet #tdw-panel .tdw-head{padding:18px 18px 10px;font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--mustard);}
+  body.tdw-tablet #tdw-panel button.tdw-item{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:10px;width:100%;padding:13px 18px;
+    font-size:13px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--text2);cursor:pointer;border-left:3px solid transparent;}
+  body.tdw-tablet #tdw-panel button.tdw-item.active{color:#fff;background:var(--bg3);border-left-color:var(--red);}
+  body.tdw-tablet #tdw-panel .tdw-foot{margin-top:auto;padding:12px 18px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px;}
+  body.tdw-tablet #tdw-panel .tdw-refresh{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:8px;cursor:pointer;
+    font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--mustard);}
+  body.tdw-tablet #tdw-panel .tdw-last{font-size:10px;color:var(--text3);}
+  body.tdw-tablet #tdw-panel .tdw-hint{font-size:10px;color:var(--text3);opacity:.7;}
+  body.tdw-tablet.tdw-open #tdw-scrim{opacity:1;pointer-events:auto;}
+  body.tdw-tablet.tdw-open #tdw-panel{transform:translateX(0);}
+  body.tdw-tablet.tdw-dragging #tdw-panel,body.tdw-tablet.tdw-dragging #tdw-scrim{transition:none;}
+
+.tdw-layout{display:none;}
+body.tdw-tablet .tdw-layout{display:flex;flex-direction:column;gap:6px;padding:16px 18px 12px;border-bottom:1px solid var(--border);}
+.tdw-layout .lbl{font-size:10px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--text3);}
+.tdw-vt{display:inline-flex;align-self:flex-start;border:1px solid var(--border);border-radius:99px;overflow:hidden;background:rgba(255,255,255,0.03);}
+.tdw-vt button{all:unset;box-sizing:border-box;display:flex;align-items:center;gap:6px;padding:7px 12px;cursor:pointer;color:var(--text3);
+  font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;}
+.tdw-vt button.on{background:rgba(217,165,33,0.16);color:var(--mustard);}
+.tdw-vt svg{display:block;}
 @media (max-width:820px){
   nav.nav-tabs{display:none !important;}
   html,body{overflow-x:hidden;}
@@ -9082,6 +9115,11 @@ async function copyRecapPacket(){
 <div id="tdw-scrim"></div>
 <div id="tdw-handle" aria-label="Open tab menu" role="button"><div class="tdw-pill"><i></i><i></i><i></i></div></div>
 <nav id="tdw-panel" aria-label="Tracker tabs">
+  <div class="tdw-layout" id="tdw-layout"><div class="lbl">Layout</div>
+    <div class="tdw-vt" role="group" aria-label="Layout">
+      <button id="tdw-vt-mobile" aria-pressed="false"><svg width="10" height="14" viewBox="0 0 10 14" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1" y="1" width="8" height="12" rx="1.5"/></svg>Mobile</button>
+      <button id="tdw-vt-desktop" aria-pressed="false"><svg width="14" height="12" viewBox="0 0 14 12" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="1" y="1" width="12" height="8" rx="1"/><path d="M5 11h4"/></svg>Desktop</button>
+    </div></div>
   <div class="tdw-head">Tracker tabs</div><div id="tdw-list"></div>
   <div class="tdw-foot">
     <button class="tdw-refresh" id="tdw-refresh" title="Refresh all data">
@@ -9136,6 +9174,38 @@ async function copyRecapPacket(){
   panel.addEventListener('touchend',()=>{ if(d){ d.moved?d.end():body.classList.remove('tdw-dragging'); d=null; } });
   scrim.addEventListener('click',close);
   document.addEventListener('keydown',e=>{ if(e.key==='Escape') close(); });
+
+  // ── Entry 420 (Hanh, 2026-11-02): Mobile/Desktop layout toggle for TABLETS ──
+  // Tablet = touch-only device (no hover, coarse pointer) whose short side is >= 600px and long side > 820px;
+  // phones and computers (incl. touch laptops) never get it. No saved choice = today's behaviour (phone layout at
+  // <=820px wide, desktop above). "Mobile" lays the page out 820px wide (the phone layout, scaled up to fill the
+  // tablet: turned panels when upright, upright panels when sideways, as on a phone); "Desktop" forces the desktop
+  // layout (1200px, scaled down) even when the tablet is upright. The choice is remembered on that tablet.
+  const LAYOUT_KEY='tncfl-layout', vp=document.querySelector('meta[name="viewport"]'), VP_NATURAL='width=device-width, initial-scale=1.0';
+  const isTablet=()=>{ const a=Math.min(screen.width,screen.height), b=Math.max(screen.width,screen.height);
+    return window.matchMedia('(hover: none) and (pointer: coarse)').matches && a>=600 && b>820; };
+  const deviceW=()=>{ const a=Math.min(screen.width,screen.height), b=Math.max(screen.width,screen.height);
+    return window.matchMedia('(orientation: portrait)').matches ? a : b; };
+  const savedLayout=()=>{ try{ return localStorage.getItem(LAYOUT_KEY)||''; }catch(e){ return ''; } };
+  function applyLayout(){
+    if(!isTablet()){ body.classList.remove('tdw-tablet'); return; }
+    body.classList.add('tdw-tablet');
+    const m=savedLayout(), w=deviceW();
+    const want = m==='mobile' && w>820 ? 'width=820' : m==='desktop' && w<=820 ? 'width=1200' : VP_NATURAL;
+    if(vp && vp.getAttribute('content')!==want) vp.setAttribute('content',want);
+    syncLayoutChip();
+  }
+  function syncLayoutChip(){
+    const mob=mqMobile.matches;
+    [['tdw-vt-mobile',mob],['tdw-vt-desktop',!mob]].forEach(([id,on])=>{ const b=document.getElementById(id); if(b){ b.classList.toggle('on',on); b.setAttribute('aria-pressed',on?'true':'false'); } });
+  }
+  function setLayout(m){ try{ localStorage.setItem(LAYOUT_KEY,m); }catch(e){} close(); applyLayout(); setTimeout(syncLayoutChip,300); }
+  document.getElementById('tdw-vt-mobile').addEventListener('click',()=>setLayout('mobile'));
+  document.getElementById('tdw-vt-desktop').addEventListener('click',()=>setLayout('desktop'));
+  window.addEventListener('orientationchange',()=>setTimeout(applyLayout,200));
+  window.addEventListener('resize',()=>{ clearTimeout(applyLayout._t); applyLayout._t=setTimeout(applyLayout,250); });
+  mqMobile.addEventListener('change',syncLayoutChip);
+  applyLayout();
 
   // ── Auto-rotate wide sections (phone upright only) ──────────────────────
   const mqUpright=window.matchMedia('(max-width:820px) and (orientation:portrait)');
