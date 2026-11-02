@@ -121,6 +121,17 @@ body{font-family:'Segoe UI',-apple-system,sans-serif;background:var(--bg);color:
 .pickem-table thead th .arrow{margin-left:4px;font-size:9px;opacity:0.35;}
 .pickem-table thead th.sorted .arrow{opacity:1;}
 .pickem-table thead th.matchup-th{text-align:center;padding:8px 2px;}
+/* Entry 422 (Hanh): hide/show circle on top of each matchup header (dot = shown, empty = hidden). A hidden game
+   shrinks to an 18px strip holding just the empty circle; its picks are hidden. Desktop and phones. */
+.pk-eye{display:block;width:14px;height:14px;margin:0 auto 6px;cursor:pointer;color:var(--text3);}
+.pk-eye svg{display:block;width:14px;height:14px;}
+.pk-eye .dot{display:none;}
+.pk-eye.on{color:var(--mustard);}
+.pk-eye.on .dot{display:inline;}
+.pickem-table th.pk-off .matchup-label{visibility:hidden;width:0;overflow:hidden;}
+.pickem-table th.pk-off{overflow:visible;}
+.pickem-table th.pk-off,.pickem-table td.pk-off{padding-left:0 !important;padding-right:0 !important;}
+.pickem-table td.pk-off > *{visibility:hidden;}
 .pickem-table .pk-filter-icon{margin-left:5px;font-size:9px;opacity:0.45;cursor:pointer;display:inline-block;}
 .pickem-table .pk-filter-icon:hover{opacity:0.9;}
 .pickem-table .pk-filter-icon.active{opacity:1;color:var(--mustard);}
@@ -7318,6 +7329,19 @@ function pickemSortValue(row, col) {
   return (pick && pick.team) ? pick.team : null;
 }
 
+// Entry 422 (Hanh, 2026-11-02): games hidden with the circle on top of each matchup header, by matchup name
+// ("AWAY @ HOME"). Kept for this page load only (every visit starts with all games shown); survives sorting,
+// filters and refreshes; another week's games are simply different names, so they start shown.
+const PICKEM_HIDDEN = new Set();
+function pickemEyeHtml(name, off) {
+  const nm = String(name).replace(/'/g, "\\'");
+  return `<span class="pk-eye${off ? '' : ' on'}" role="button" title="${off ? 'Show this game' : 'Hide this game'}" aria-label="${off ? 'Show' : 'Hide'} ${name}" onclick="event.stopPropagation(); pickemToggleGame('${nm}')">`
+    + `<svg viewBox="0 0 14 14" aria-hidden="true"><circle cx="7" cy="7" r="5.75" fill="none" stroke="currentColor" stroke-width="1.5"/><circle class="dot" cx="7" cy="7" r="2.5" fill="currentColor"/></svg></span>`;
+}
+function pickemToggleGame(name) {
+  if (PICKEM_HIDDEN.has(name)) PICKEM_HIDDEN.delete(name); else PICKEM_HIDDEN.add(name);
+  renderPickemTable();
+}
 function renderPickemTable() {
   const data = PICKEM_TABLE_DATA;
   const wrap = document.getElementById('pickem-table-wrap');
@@ -7365,7 +7389,9 @@ function renderPickemTable() {
     const colId = 'matchup:' + i;
     const parts = String(m.name).split(' @ ');
     const away = parts[0] || '', home = parts[1] || '';
-    headHtml += `<th class="matchup-th ${sortedClass(colId)}" onclick="sortPickemTable('${colId}')">` +
+    const off = PICKEM_HIDDEN.has(m.name);   // Entry 422
+    headHtml += `<th class="matchup-th ${sortedClass(colId)}${off ? ' pk-off' : ''}" onclick="sortPickemTable('${colId}')">` +
+      pickemEyeHtml(m.name, off) +
       `<div class="matchup-label">` +
       `<span class="mu-team">${away ? pickemLogoStickerHtml(away, away) : ''}</span>` +
       `<span class="mu-vs">vs</span>` +
@@ -7388,7 +7414,7 @@ function renderPickemTable() {
       `</td>`;
     cells += `<td class="pk-ovr">${row.ovr}</td>`;
     cells += `<td class="pk-pts">${row.pts}</td>`;
-    row.picks.forEach(pick => { cells += `<td class="pk-pick-td">${pickemPickCellHtml(pick)}</td>`; });
+    row.picks.forEach((pick, i) => { const off = PICKEM_HIDDEN.has((data.matchups[i] || {}).name); cells += `<td class="pk-pick-td${off ? ' pk-off' : ''}">${pickemPickCellHtml(pick)}</td>`; });   // Entry 422
     // Entry 315: "—" for no tiebreak submission this week, matching ESPN's
     // own "--" and this table's existing dash convention for missing picks.
     cells += `<td class="pk-tie">${row.tie != null ? row.tie : '<span class="pk-dash">—</span>'}</td>`;
@@ -7406,9 +7432,11 @@ function renderPickemTable() {
   // 5%, folded into Entry) and Tie Break added at the end.
   const n = data.matchups.length || 1;
   const entryPct = 18, ovrPct = 6, ptsPct = 6, tiePct = 7;
-  const matchupPct = (100 - entryPct - ovrPct - ptsPct - tiePct) / n;
+  // Entry 422: hidden games get a fixed 18px strip; the shown games split the matchup share between them.
+  const nOff = data.matchups.filter(m => PICKEM_HIDDEN.has(m.name)).length;
+  const matchupPct = (100 - entryPct - ovrPct - ptsPct - tiePct) / ((n - nOff) || 1);
   let colgroupHtml = `<col style="width:${entryPct}%"><col style="width:${ovrPct}%"><col style="width:${ptsPct}%">`;
-  for (let i = 0; i < n; i++) colgroupHtml += `<col style="width:${matchupPct}%">`;
+  for (let i = 0; i < n; i++) colgroupHtml += PICKEM_HIDDEN.has((data.matchups[i] || {}).name) ? `<col style="width:18px">` : `<col style="width:${matchupPct}%">`;
   colgroupHtml += `<col style="width:${tiePct}%">`;
 
   wrap.innerHTML = `<table class="pickem-table"><colgroup>${colgroupHtml}</colgroup><thead><tr>${headHtml}</tr></thead><tbody>${bodyHtml}</tbody></table>`;
