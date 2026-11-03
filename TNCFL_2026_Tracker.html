@@ -7979,7 +7979,8 @@ function renderPeak(){
   const nCols=cols.length,nMgr=players.length;
   const DPR=Math.max(1,window.devicePixelRatio||1);
   const containerW=Math.max(360,(canvas.parentElement.clientWidth||660)-28);
-  const longestName=Math.max(...players.map(m=>m.length),4);
+  const fmtT=n=>n.toFixed(1);   // Entry 425 (S086): career HMOTW tally shown after each name ("Hanh 38.5")
+  const longestName=Math.max(...players.map(m=>(m+' '+fmtT(career(m))).length),4);
   const namePx=longestName*7+16;
   const maxCareer=Math.max(1,...players.map(m=>career(m)));
   const hsTotal=Math.min(15,150/maxCareer);
@@ -8042,6 +8043,7 @@ function renderPeak(){
     const [nx,ny]=proj(nCols,0,zi+0.5);
     ctx.fillStyle=mc;ctx.font='700 '+fz+'px Segoe UI,sans-serif';ctx.textAlign='left';
     ctx.fillText(m,nx+10,ny+4);
+    {const tw=ctx.measureText(m+' ').width;ctx.fillStyle='rgba(200,200,200,0.85)';ctx.font='600 '+fz+'px Segoe UI,sans-serif';ctx.fillText(fmtT(career(m)),nx+10+tw,ny+4);}   // Entry 425: tally in light grey
   }
   bindPeakHover();
 }
