@@ -8018,7 +8018,8 @@ function renderPeak(){
   // Grid
   for(let zi=0;zi<=nMgr;zi++){const [x0,y0]=proj(0,0,zi),[x1,y1]=proj(nCols,0,zi);ctx.strokeStyle='rgba(255,255,255,0.04)';ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();}
   for(let ci=0;ci<=nCols;ci++){const [x0,y0]=proj(ci,0,0),[x1,y1]=proj(ci,0,nMgr);ctx.strokeStyle='rgba(255,255,255,0.03)';ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();}
-  [0,Math.round(maxCareer*0.5),Math.round(maxCareer)].forEach(gv=>{const hpx=gv*hsTotal;const [x0,y0]=proj(0,hpx,0),[x1,y1]=proj(nCols,hpx,0);ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();ctx.fillStyle='#777';ctx.font='600 '+fz+'px Segoe UI,sans-serif';ctx.textAlign='right';ctx.fillText(gv===0?'—':gv,x0-5,y0+3);});
+  // Entry 426 (S086): y-axis gridlines every 10 starting at 10, up to the next 10 at or above the tallest career tally (38.5 -> 40)
+  [0,...Array.from({length:Math.ceil(maxCareer/10)},(_,i)=>(i+1)*10)].forEach(gv=>{const hpx=gv*hsTotal;const [x0,y0]=proj(0,hpx,0),[x1,y1]=proj(nCols,hpx,0);ctx.strokeStyle='rgba(255,255,255,0.05)';ctx.lineWidth=0.8;ctx.beginPath();ctx.moveTo(x0,y0);ctx.lineTo(x1,y1);ctx.stroke();ctx.fillStyle='#777';ctx.font='600 '+fz+'px Segoe UI,sans-serif';ctx.textAlign='right';ctx.fillText(gv===0?'—':gv,x0-5,y0+3);});
 
   // Column labels
   cols.forEach((col,ci)=>{const [lx,ly]=proj(ci,0,0);ctx.fillStyle=col==='TOTAL'?'rgba(225,225,225,0.95)':(col==='2026'?'rgba(217,165,33,0.9)':'rgba(150,150,150,0.7)');ctx.font='700 '+fz+'px Segoe UI,sans-serif';ctx.textAlign='left';ctx.fillText(col==='TOTAL'?'TOTAL':col.slice(2),lx-3,ly+16);});
