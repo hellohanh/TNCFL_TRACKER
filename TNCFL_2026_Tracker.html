@@ -9341,10 +9341,17 @@ body.tdw-tablet .tdw-layout{display:flex;flex-direction:column;gap:6px;padding:1
   const deviceW=()=>{ const a=Math.min(screen.width,screen.height), b=Math.max(screen.width,screen.height);
     return window.matchMedia('(orientation: portrait)').matches ? a : b; };
   const savedLayout=()=>{ try{ return localStorage.getItem(LAYOUT_KEY)||''; }catch(e){ return ''; } };
+  // Entry 428 (Hanh, 2026-11-04): Galaxy Z Fold inner screen (~704x933, nearly square) — touch-only, short side
+  // 600-800px, short/long >= 0.7. Cover screen (~475 wide), phones and iPads never match. It gets the phone layout
+  // in BOTH orientations (sideways = laid out 820 wide) with panels kept UPRIGHT (no turning), each wide panel laid
+  // out at its desktop width and scaled to fit the screen width. A saved "Desktop" choice still wins.
+  const isFoldInner=()=>{ if(!isTablet()) return false; const a=Math.min(screen.width,screen.height), b=Math.max(screen.width,screen.height);
+    return a>=600 && a<=800 && a/b>=0.7; };
+  window.tdwIsFoldInner=isFoldInner;
   function applyLayout(){
     if(!isTablet()){ body.classList.remove('tdw-tablet'); return; }
     body.classList.add('tdw-tablet');
-    const m=savedLayout(), w=deviceW();
+    const m=savedLayout()||(isFoldInner()?'mobile':''), w=deviceW();   // Entry 428: Fold inner defaults to Mobile
     // Entry 421: Desktop now lays out 1200 wide on ANY screen narrower than 1200 (the desktop layout needs ~1110-1200px;
     // between 821 and 1199 it used to overflow sideways), so a phone or unfolded Fold in Desktop fits the screen exactly.
     // Each forced width also carries its exact zoom (screen width / layout width) so the browser re-fits the page
@@ -9444,7 +9451,9 @@ body.tdw-tablet .tdw-layout{display:flex;flex-direction:column;gap:6px;padding:1
     const y0=window.scrollY, sl0=[...document.querySelectorAll('.rot-wrap')].map(w=>w.scrollLeft);
     try{
       unrotateAll();
-      if(!mqUpright.matches) return;
+      const upright=isFoldInner();   // Entry 428: Fold inner screen — panels stay upright, scaled to the screen width
+      body.classList.toggle('tdw-fold',upright);
+      if(!mqUpright.matches && !upright) return;
       const tab=document.getElementById('tab-'+id); if(!tab||tab.style.display==='none') return;
       const mods=[];
       (EXTRA_UNITS[id]||[]).forEach(sel=>{ const e=document.querySelector(sel); if(e && getComputedStyle(e).display!=='none' && e.offsetHeight>0) mods.push(e); });
@@ -9504,6 +9513,9 @@ body.tdw-tablet .tdw-layout{display:flex;flex-direction:column;gap:6px;padding:1
           if(need>40 && need<sgw.clientHeight){ sgw.dataset.rotSplit=sgw.getAttribute('style')||'-'; sgw.style.height=need+'px'; sgw.style.overflow='hidden';
             const card=sgw.parentElement; card.dataset.rotSplit=card.getAttribute('style')||'-'; card.style.paddingBottom='6px'; } }catch(e){} }
         let H=m.offsetHeight;
+        if(upright){ const ww=x.sizer.parentElement.clientWidth, su=Math.min(1, ww/Wd);   // Entry 428: upright, fit the width
+          m.style.width=Wd+'px'; m.style.transformOrigin='0 0'; m.style.transform=Math.abs(su-1)>0.001?'scale('+su+')':'none';
+          x.sizer.style.width=(Wd*su)+'px'; x.sizer.style.height=(H*su)+'px'; return; }
         // Entry 361: FIT tabs shrink each rotated section so ALL of it is visible on the turned screen —
         // its height fits the phone's short side (no swiping to reach the last rows/bars) and its
         // length fits the visible long side. Other tabs stay full size (s=1) and scroll.
