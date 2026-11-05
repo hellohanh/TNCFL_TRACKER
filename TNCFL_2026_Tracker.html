@@ -1401,23 +1401,6 @@ function parseTransactionsByWeek(transData) {
     ' total transactions (any status):', (transData.transactions || []).length);
   const diagRows = [];
 
-  // Entry 429 diagnostic (S087): print EVERY trade-related record (any status) as one row per player, so the
-  // first real trade's shape can be read from a screenshot (no console pasting needed). Remove once confirmed.
-  {
-    const nm = id => (ESPN_ID_MAP[id] ? ESPN_ID_MAP[id].name : id);
-    const rows = [];
-    (transData.transactions || []).filter(t => /TRADE/.test(t.type || '') || (t.items || []).some(i => /TRADE/.test(i.type || ''))).forEach(t => {
-      const base = { id: String(t.id).slice(0, 8), type: t.type, status: t.status, team: nm(t.teamId), spid: t.scoringPeriodId,
-        proposed: t.proposedDate ? new Date(t.proposedDate).toLocaleString() : '', processed: t.processDate ? new Date(t.processDate).toLocaleString() : '',
-        related: t.relatedTransactionId ? String(t.relatedTransactionId).slice(0, 8) : '' };
-      if (!(t.items || []).length) rows.push({ ...base, item: '(no items)' });
-      (t.items || []).forEach(i => rows.push({ ...base, item: i.type, player: (PLAYER_NAME_MAP[i.playerId] || {}).name || i.playerId, from: nm(i.fromTeamId), to: nm(i.toTeamId) }));
-    });
-    console.info('[Trades DIAG] ' + rows.length + ' row(s) from trade-related records (any status) — screenshot this table for Claude:');
-    console.table(rows);
-    rows.forEach((r, i) => console.info('[Trades DIAG] #' + (i + 1) + ' ' + Object.entries(r).map(([k, v]) => k + '=' + v).join(' | ')));
-  }
-
   (transData.transactions || []).forEach(t => {
     if (t.status !== 'EXECUTED') return;
     const wk = t.scoringPeriodId;
@@ -1619,6 +1602,10 @@ async function fetchESPNData() {
     // so the read can include the current week's just-submitted kickoff time.
     // (The Entry 326 hoist had it racing ahead of the submit.)
     let kickoffTimesPromise = null;
+    // Entry 430 (S087): permanent trade record from the Worker (append-only KV) — survives a traded player's drop.
+    const tradesPromise = fetch(`${WORKER_URL}/trades`)
+      .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
+      .catch(e => ({ ok: false, _err: e }));
     const faActivityPromise = fetch(`${WORKER_URL}/fa-activity`)
       .then(async r => ({ ok: r.ok, status: r.status, data: r.ok ? await r.json() : null }))
       .catch(e => ({ ok: false, _err: e }));
@@ -1991,6 +1978,21 @@ async function fetchESPNData() {
         }));
         console.info('[Trades] roster acquisition types this week: ' + JSON.stringify(acq) + ' — ' + ROSTER_TRADES.length + ' player(s) acquired by trade');
       }
+      // Entry 430: merge the Worker's permanent trade record (players since dropped stay counted). Dedupe on
+      // player + receiving team + acquisition date; names saved by the Worker fill PLAYER_NAME_MAP if missing.
+      try {
+        const tr = await tradesPromise;
+        if (tr.ok && tr.data) {
+          const keyOf = t => t.playerId + '|' + t.teamId + '|' + (t.date || 0);
+          const have = new Set(ROSTER_TRADES.map(keyOf)); let fromWorker = 0;
+          (tr.data.trades || []).forEach(t => {
+            if (t.name && !PLAYER_NAME_MAP[t.playerId]) PLAYER_NAME_MAP[t.playerId] = { name: t.name, proTeamId: t.proTeamId, positionId: t.positionId };
+            if (have.has(keyOf(t))) return; have.add(keyOf(t)); fromWorker++;
+            ROSTER_TRADES.push({ teamId: t.teamId, playerId: t.playerId, date: t.date || 0 });
+          });
+          console.info('[Trades] Worker record: ' + (tr.data.count || 0) + ' player(s) (' + tr.data.note + '); ' + fromWorker + ' no longer on a roster, kept for fees');
+        } else console.warn('[Trades] Worker /trades not available' + (tr.status ? ' (status ' + tr.status + ')' : '') + ' — using current rosters only.', tr._err || '');
+      } catch (twErr) { console.warn('[Trades] Worker /trades merge failed — using current rosters only.', twErr); }
       rosterDatas.forEach(rosterData => {
         if (!rosterData) return;
         (rosterData.teams || []).forEach(team => {
@@ -2094,47 +2096,6 @@ async function fetchESPNData() {
         WK_TRADES = parsed.wkTrades;
         TRANS_BY_MANAGER_WK = parsed.perManagerWk;
         TRADES_LOG = parsed.tradesLog || [];
-        // Entry 429 DIAG2 (S087, temporary): the accepted trade's parent record (TRADE_ACCEPT.relatedTransactionId)
-        // is not in the per-week mTransactions2 log. Try four direct ways to read it; print results as filterable lines.
-        (async () => {
-          const nm = id => (ESPN_ID_MAP[id] ? ESPN_ID_MAP[id].name : id);
-          const pn = id => (PLAYER_NAME_MAP[id] || {}).name || id;
-          const base = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/segments/0/leagues/${CFG.LEAGUE_ID}`;
-          const ids = [...new Set((transData.transactions || []).filter(t => t.type === 'TRADE_ACCEPT' && t.relatedTransactionId).map(t => t.relatedTransactionId))];
-          const show = (tag, t) => console.info('[Trades DIAG2] ' + tag + ' id=' + String(t.id).slice(0, 8) + ' type=' + t.type + ' status=' + t.status +
-            ' spid=' + t.scoringPeriodId + ' processed=' + (t.processDate ? new Date(t.processDate).toLocaleString() : '') +
-            ' items=' + (t.items || []).map(i => i.type + ':' + pn(i.playerId) + ' ' + nm(i.fromTeamId) + '->' + nm(i.toTeamId)).join('; '));
-          console.info('[Trades DIAG2] accepted trade parent ids: ' + ids.map(x => String(x).slice(0, 8)).join(', '));
-          const tries = [
-            ['byId', `${base}?view=mTransactions2`, { transactions: { filterIds: { value: ids } } }],
-            ['byType', `${base}?view=mTransactions2`, { transactions: { filterType: { value: ['TRADE_PROPOSAL', 'TRADE_UPHOLD', 'TRADE_ACCEPT'] } } }],
-            ['spid10', `${base}?scoringPeriodId=10&view=mTransactions2`, null],
-          ];
-          for (const [tag, url, f] of tries) {
-            try {
-              const h = { Accept: 'application/json' }; if (f) h['X-Fantasy-Filter'] = JSON.stringify(f);
-              const r = await fetch(url, { headers: h });
-              if (!r.ok) { console.info('[Trades DIAG2] ' + tag + ' HTTP ' + r.status); continue; }
-              const d = await r.json(); const all = d.transactions || [];
-              const tx = all.filter(t => /TRADE/.test(t.type || '') || ids.includes(t.id));
-              console.info('[Trades DIAG2] ' + tag + ': ' + all.length + ' transaction(s), ' + tx.length + ' trade-related');
-              tx.slice(0, 12).forEach(t => show(tag, t));
-            } catch (e) { console.info('[Trades DIAG2] ' + tag + ' failed: ' + e.message); }
-          }
-          try {
-            const f = { topics: { filterType: { value: ['ACTIVITY_TRANSACTIONS'] }, limit: 25, limitPerMessageSet: { value: 25 }, offset: 0,
-              sortMessageDate: { sortPriority: 1, sortAsc: false }, sortFor: { sortPriority: 2, sortAsc: false } } };
-            const r = await fetch(`${base}/communication/?view=kona_league_communication`, { headers: { Accept: 'application/json', 'X-Fantasy-Filter': JSON.stringify(f) } });
-            if (!r.ok) console.info('[Trades DIAG2] activity HTTP ' + r.status);
-            else {
-              const d = await r.json(); const tops = d.topics || [];
-              console.info('[Trades DIAG2] activity: ' + tops.length + ' topic(s)');
-              tops.filter(tp => (tp.messages || []).some(m => m.messageTypeId === 244) || tops.indexOf(tp) < 3).slice(0, 6).forEach(tp =>
-                console.info('[Trades DIAG2] activity ' + new Date(tp.date).toLocaleString() + ' type=' + tp.type + ' msgs=' +
-                  (tp.messages || []).map(m => 'm' + m.messageTypeId + ' for=' + nm(m.for) + ' from=' + nm(m.from) + ' to=' + nm(m.to) + ' target=' + pn(m.targetId)).join('; ')));
-            }
-          } catch (e) { console.info('[Trades DIAG2] activity failed: ' + e.message); }
-        })();
         // Entry 429: m.trades now = players RECEIVED in trades (what the $2 trade fee is charged on), counted from
         // the transaction log. ESPN's own mTeam counter is kept as m.tradesESPN for the cross-check below.
         // Only when every week's log loaded — otherwise keep ESPN's counter rather than undercount.
