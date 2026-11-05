@@ -1400,6 +1400,22 @@ function parseTransactionsByWeek(transData) {
     ' total transactions (any status):', (transData.transactions || []).length);
   const diagRows = [];
 
+  // Entry 429 diagnostic (S087): print EVERY trade-related record (any status) as one row per player, so the
+  // first real trade's shape can be read from a screenshot (no console pasting needed). Remove once confirmed.
+  {
+    const nm = id => (ESPN_ID_MAP[id] ? ESPN_ID_MAP[id].name : id);
+    const rows = [];
+    (transData.transactions || []).filter(t => /TRADE/.test(t.type || '') || (t.items || []).some(i => /TRADE/.test(i.type || ''))).forEach(t => {
+      const base = { id: String(t.id).slice(0, 8), type: t.type, status: t.status, team: nm(t.teamId), spid: t.scoringPeriodId,
+        proposed: t.proposedDate ? new Date(t.proposedDate).toLocaleString() : '', processed: t.processDate ? new Date(t.processDate).toLocaleString() : '',
+        related: t.relatedTransactionId ? String(t.relatedTransactionId).slice(0, 8) : '' };
+      if (!(t.items || []).length) rows.push({ ...base, item: '(no items)' });
+      (t.items || []).forEach(i => rows.push({ ...base, item: i.type, player: (PLAYER_NAME_MAP[i.playerId] || {}).name || i.playerId, from: nm(i.fromTeamId), to: nm(i.toTeamId) }));
+    });
+    console.info('[Trades DIAG] ' + rows.length + ' row(s) from trade-related records (any status) — screenshot this table for Claude:');
+    console.table(rows);
+  }
+
   (transData.transactions || []).forEach(t => {
     if (t.status !== 'EXECUTED') return;
     const wk = t.scoringPeriodId;
