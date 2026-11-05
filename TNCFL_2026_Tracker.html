@@ -2072,6 +2072,47 @@ async function fetchESPNData() {
         WK_TRADES = parsed.wkTrades;
         TRANS_BY_MANAGER_WK = parsed.perManagerWk;
         TRADES_LOG = parsed.tradesLog || [];
+        // Entry 429 DIAG2 (S087, temporary): the accepted trade's parent record (TRADE_ACCEPT.relatedTransactionId)
+        // is not in the per-week mTransactions2 log. Try four direct ways to read it; print results as filterable lines.
+        (async () => {
+          const nm = id => (ESPN_ID_MAP[id] ? ESPN_ID_MAP[id].name : id);
+          const pn = id => (PLAYER_NAME_MAP[id] || {}).name || id;
+          const base = `${CFG.ESPN_BASE}seasons/${CFG.SEASON}/segments/0/leagues/${CFG.LEAGUE_ID}`;
+          const ids = [...new Set((transData.transactions || []).filter(t => t.type === 'TRADE_ACCEPT' && t.relatedTransactionId).map(t => t.relatedTransactionId))];
+          const show = (tag, t) => console.info('[Trades DIAG2] ' + tag + ' id=' + String(t.id).slice(0, 8) + ' type=' + t.type + ' status=' + t.status +
+            ' spid=' + t.scoringPeriodId + ' processed=' + (t.processDate ? new Date(t.processDate).toLocaleString() : '') +
+            ' items=' + (t.items || []).map(i => i.type + ':' + pn(i.playerId) + ' ' + nm(i.fromTeamId) + '->' + nm(i.toTeamId)).join('; '));
+          console.info('[Trades DIAG2] accepted trade parent ids: ' + ids.map(x => String(x).slice(0, 8)).join(', '));
+          const tries = [
+            ['byId', `${base}?view=mTransactions2`, { transactions: { filterIds: { value: ids } } }],
+            ['byType', `${base}?view=mTransactions2`, { transactions: { filterType: { value: ['TRADE_PROPOSAL', 'TRADE_UPHOLD', 'TRADE_ACCEPT'] } } }],
+            ['spid10', `${base}?scoringPeriodId=10&view=mTransactions2`, null],
+          ];
+          for (const [tag, url, f] of tries) {
+            try {
+              const h = { Accept: 'application/json' }; if (f) h['X-Fantasy-Filter'] = JSON.stringify(f);
+              const r = await fetch(url, { headers: h });
+              if (!r.ok) { console.info('[Trades DIAG2] ' + tag + ' HTTP ' + r.status); continue; }
+              const d = await r.json(); const all = d.transactions || [];
+              const tx = all.filter(t => /TRADE/.test(t.type || '') || ids.includes(t.id));
+              console.info('[Trades DIAG2] ' + tag + ': ' + all.length + ' transaction(s), ' + tx.length + ' trade-related');
+              tx.slice(0, 12).forEach(t => show(tag, t));
+            } catch (e) { console.info('[Trades DIAG2] ' + tag + ' failed: ' + e.message); }
+          }
+          try {
+            const f = { topics: { filterType: { value: ['ACTIVITY_TRANSACTIONS'] }, limit: 25, limitPerMessageSet: { value: 25 }, offset: 0,
+              sortMessageDate: { sortPriority: 1, sortAsc: false }, sortFor: { sortPriority: 2, sortAsc: false } } };
+            const r = await fetch(`${base}/communication/?view=kona_league_communication`, { headers: { Accept: 'application/json', 'X-Fantasy-Filter': JSON.stringify(f) } });
+            if (!r.ok) console.info('[Trades DIAG2] activity HTTP ' + r.status);
+            else {
+              const d = await r.json(); const tops = d.topics || [];
+              console.info('[Trades DIAG2] activity: ' + tops.length + ' topic(s)');
+              tops.filter(tp => (tp.messages || []).some(m => m.messageTypeId === 244) || tops.indexOf(tp) < 3).slice(0, 6).forEach(tp =>
+                console.info('[Trades DIAG2] activity ' + new Date(tp.date).toLocaleString() + ' type=' + tp.type + ' msgs=' +
+                  (tp.messages || []).map(m => 'm' + m.messageTypeId + ' for=' + nm(m.for) + ' from=' + nm(m.from) + ' to=' + nm(m.to) + ' target=' + pn(m.targetId)).join('; ')));
+            }
+          } catch (e) { console.info('[Trades DIAG2] activity failed: ' + e.message); }
+        })();
         // Entry 429: m.trades now = players RECEIVED in trades (what the $2 trade fee is charged on), counted from
         // the transaction log. ESPN's own mTeam counter is kept as m.tradesESPN for the cross-check below.
         // Only when every week's log loaded — otherwise keep ESPN's counter rather than undercount.
