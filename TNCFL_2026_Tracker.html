@@ -1414,6 +1414,7 @@ function parseTransactionsByWeek(transData) {
     });
     console.info('[Trades DIAG] ' + rows.length + ' row(s) from trade-related records (any status) — screenshot this table for Claude:');
     console.table(rows);
+    rows.forEach((r, i) => console.info('[Trades DIAG] #' + (i + 1) + ' ' + Object.entries(r).map(([k, v]) => k + '=' + v).join(' | ')));
   }
 
   (transData.transactions || []).forEach(t => {
