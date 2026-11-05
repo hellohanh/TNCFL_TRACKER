@@ -1242,6 +1242,7 @@ let LIVE_WK = 0;     // Entry 112 (2026-09-09): completed/locked weeks PLUS the 
                       // See fetchESPNData() for how this is computed.
 let WK_TRANS  = [];
 let WK_TRADES = [];
+let ROSTER_TRADES = []; // Entry 429: current-roster entries acquired by TRADE [{teamId, playerId, date}]
 let TRADES_LOG = []; // Entry 429: [{wk, date, sides:[{team, from, playerIds:[]}]}] — feeds the Transactions tab's Trades table
 let TRANS_BY_MANAGER_WK = {}; // { managerName: { wk: {trans, trades} } } — Entry 270, feeds computeRecapStandings()
 const FAAB_BUDGET = 1000; // starting free-agent acquisition budget per manager (Entry 120, 2026-09-09)
@@ -1461,6 +1462,15 @@ function parseTransactionsByWeek(transData) {
   });
   console.table(diagRows);
 
+  // Entry 429 (S087): add trades seen on the current rosters (acquisitionType TRADE) that the log can't show.
+  // The giving team = the other team with a TRADE acquisition at the same moment (within 2 minutes).
+  (ROSTER_TRADES || []).forEach(rt => {
+    const partner = ROSTER_TRADES.find(o => o.teamId !== rt.teamId && Math.abs((o.date || 0) - (rt.date || 0)) <= 120000);
+    const from = partner ? partner.teamId : null;
+    const already = [...tradeItems.values()].some(it => it.playerId === rt.playerId && it.to === rt.teamId);
+    if (already) return;
+    tradeItems.set('R|' + rt.playerId + '|' + rt.teamId, { idx: effectiveTxWeek(CURRENT_WK, rt.date || null), ts: rt.date || 0, playerId: rt.playerId, from, to: rt.teamId });
+  });
   // Entry 429: count each received player once, in the week the trade went through, for the receiving manager;
   // group the players into trades (same two teams, same week) for the Trades table.
   const groups = new Map();
@@ -1969,6 +1979,18 @@ async function fetchESPNData() {
       const rosterDatas = await Promise.all(
         rosterResps.map(r => (r && r.ok) ? r.json().catch(() => null) : Promise.resolve(null))
       );
+      // Entry 429 (S087): ESPN does not expose an accepted trade's player list in the public transaction log (the
+      // parent proposal is missing; the activity feed needs a login). The CURRENT roster still marks each traded
+      // player: entry.acquisitionType === 'TRADE' with entry.acquisitionDate. Collected from the current week only.
+      ROSTER_TRADES = [];
+      { const cur = rosterDatas[rosterDatas.length - 1]; const acq = {};
+        if (cur) (cur.teams || []).forEach(team => (team.roster && team.roster.entries || []).forEach(entry => {
+          acq[entry.acquisitionType] = (acq[entry.acquisitionType] || 0) + 1;
+          const pid = entry.playerId || (entry.playerPoolEntry && entry.playerPoolEntry.id);
+          if (entry.acquisitionType === 'TRADE' && pid) ROSTER_TRADES.push({ teamId: team.id, playerId: pid, date: entry.acquisitionDate || 0 });
+        }));
+        console.info('[Trades] roster acquisition types this week: ' + JSON.stringify(acq) + ' — ' + ROSTER_TRADES.length + ' player(s) acquired by trade');
+      }
       rosterDatas.forEach(rosterData => {
         if (!rosterData) return;
         (rosterData.teams || []).forEach(team => {
