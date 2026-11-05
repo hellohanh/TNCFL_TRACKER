@@ -2058,10 +2058,16 @@ async function fetchESPNData() {
         // Entry 429: m.trades now = players RECEIVED in trades (what the $2 trade fee is charged on), counted from
         // the transaction log. ESPN's own mTeam counter is kept as m.tradesESPN for the cross-check below.
         // Only when every week's log loaded — otherwise keep ESPN's counter rather than undercount.
+        // Safety (S087): if the log found FEWER trades for a manager than ESPN's counter (which counts trades),
+        // the log is missing a trade record we can't read yet — keep ESPN's counter for that manager rather than
+        // charging $0, and say so in the console.
         if (transOk) MANAGERS.forEach(m => {
           m.tradesESPN = m.trades;
           const byWk = TRANS_BY_MANAGER_WK[m.name] || {};
-          m.trades = Object.values(byWk).reduce((n, w) => n + (w.trades || 0), 0);
+          const received = Object.values(byWk).reduce((n, w) => n + (w.trades || 0), 0);
+          const tradesFound = TRADES_LOG.filter(t => t.sides.some(sd => sd.team === m.name || sd.from === m.name)).length;
+          if (tradesFound >= (m.tradesESPN || 0)) m.trades = received;
+          else console.warn('[Trades] ' + m.name + ': ESPN counts ' + m.tradesESPN + ' trade(s) but the log only shows ' + tradesFound + ' — keeping ESPN\'s counter for fees until the trade record is readable.');
         });
 
         // FAAB budget (Entry 120) — reuses this same transData, no extra fetch.
