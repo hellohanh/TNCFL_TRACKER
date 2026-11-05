@@ -1242,6 +1242,7 @@ let LIVE_WK = 0;     // Entry 112 (2026-09-09): completed/locked weeks PLUS the 
                       // See fetchESPNData() for how this is computed.
 let WK_TRANS  = [];
 let WK_TRADES = [];
+let TRADES_LOG = []; // Entry 429: [{wk, date, sides:[{team, from, playerIds:[]}]}] — feeds the Transactions tab's Trades table
 let TRANS_BY_MANAGER_WK = {}; // { managerName: { wk: {trans, trades} } } — Entry 270, feeds computeRecapStandings()
 const FAAB_BUDGET = 1000; // starting free-agent acquisition budget per manager (Entry 120, 2026-09-09)
 let FAAB_SPENT = {};      // managerName -> total $ spent on waiver bids this season
@@ -1368,6 +1369,7 @@ function parseTransactionsByWeek(transData) {
   // (mTeam's transactionCounter) — no way to ask ESPN for "as of week W";
   // this is the only source for a real historical per-manager count.
   const perManagerWk = {}; // { managerName: { wk: {trans, trades} } }
+  const tradeItems = new Map(); // Entry 429: playerId|from|to -> latest executed record
   const bump = (name, wk, field) => {
     if (!perManagerWk[name]) perManagerWk[name] = {};
     if (!perManagerWk[name][wk]) perManagerWk[name][wk] = { trans: 0, trades: 0 };
@@ -1420,18 +1422,47 @@ function parseTransactionsByWeek(transData) {
     // never actually ran — effectiveTxWeek()'s `timestampMs != null` guard
     // always saw `undefined`, silently falling back to the cruder
     // CURRENT_WK-relative method every time regardless of Entry 221's fix.
-    const idx = effectiveTxWeek(wk, t.proposedDate);
+    // Entry 429 (S087): a trade belongs to the week it went THROUGH (processDate), not when it was proposed.
+    const isTrade = (t.items || []).some(i => i.type === 'TRADE');
+    const idx = effectiveTxWeek(wk, (isTrade && t.processDate) ? t.processDate : t.proposedDate);
     diagRows.push({ type: t.type, scoringPeriodId: wk, proposedDate: t.proposedDate, status: t.status, rangeFiltered: false, idx });
     if (idx < 0 || idx >= size) return;
     const managerName = ESPN_ID_MAP[t.teamId] ? ESPN_ID_MAP[t.teamId].name : null;
     (t.items || []).forEach(item => {
       if (item.type === 'ADD')   { wkTrans[idx]++;  if (managerName) bump(managerName, idx, 'trans'); }
-      if (item.type === 'TRADE') { wkTrades[idx]++; if (managerName) bump(managerName, idx, 'trades'); }
+      // Entry 429 (S087, first real trade — Aidan <-> tEDDy bEARs, 4 players, expected $8, tracker showed $4):
+      // the rule is $2 per player RECEIVED, charged to the RECEIVING team (item.toTeamId) — not the team that
+      // proposed the trade (t.teamId). Collected here and counted once per player after the loop, because
+      // ESPN can log one trade as several records (proposal / accept / processed).
+      if (item.type === 'TRADE') {
+        const k = item.playerId + '|' + item.fromTeamId + '|' + item.toTeamId;
+        const ts = t.processDate || t.proposedDate || 0;
+        const prev = tradeItems.get(k);
+        if (!prev || ts > prev.ts) tradeItems.set(k, { idx, ts, playerId: item.playerId, from: item.fromTeamId, to: item.toTeamId });
+      }
     });
   });
   console.table(diagRows);
 
-  return { wkTrans, wkTrades, perManagerWk };
+  // Entry 429: count each received player once, in the week the trade went through, for the receiving manager;
+  // group the players into trades (same two teams, same week) for the Trades table.
+  const groups = new Map();
+  tradeItems.forEach(it => {
+    if (it.idx < 0 || it.idx >= size) return;
+    const toName = ESPN_ID_MAP[it.to] ? ESPN_ID_MAP[it.to].name : null;
+    const fromName = ESPN_ID_MAP[it.from] ? ESPN_ID_MAP[it.from].name : null;
+    wkTrades[it.idx]++; if (toName) bump(toName, it.idx, 'trades');
+    const gk = it.idx + '|' + [it.from, it.to].sort().join('-');
+    if (!groups.has(gk)) groups.set(gk, { wk: it.idx, date: 0, sides: {} });
+    const g = groups.get(gk); g.date = Math.max(g.date, it.ts || 0);
+    const sk = String(it.to);
+    if (!g.sides[sk]) g.sides[sk] = { team: toName || ('Team ' + it.to), from: fromName || ('Team ' + it.from), playerIds: [] };
+    g.sides[sk].playerIds.push(it.playerId);
+  });
+  const tradesLog = [...groups.values()].map(g => ({ wk: g.wk, date: g.date, sides: Object.values(g.sides) }))
+    .sort((a, b) => b.date - a.date);
+
+  return { wkTrans, wkTrades, perManagerWk, tradesLog };
 }
 
 // ── FAAB BUDGET PARSER (Entry 120, 2026-09-09) ──────────────────────────
@@ -2023,6 +2054,15 @@ async function fetchESPNData() {
         WK_TRANS  = parsed.wkTrans;
         WK_TRADES = parsed.wkTrades;
         TRANS_BY_MANAGER_WK = parsed.perManagerWk;
+        TRADES_LOG = parsed.tradesLog || [];
+        // Entry 429: m.trades now = players RECEIVED in trades (what the $2 trade fee is charged on), counted from
+        // the transaction log. ESPN's own mTeam counter is kept as m.tradesESPN for the cross-check below.
+        // Only when every week's log loaded — otherwise keep ESPN's counter rather than undercount.
+        if (transOk) MANAGERS.forEach(m => {
+          m.tradesESPN = m.trades;
+          const byWk = TRANS_BY_MANAGER_WK[m.name] || {};
+          m.trades = Object.values(byWk).reduce((n, w) => n + (w.trades || 0), 0);
+        });
 
         // FAAB budget (Entry 120) — reuses this same transData, no extra fetch.
         const spentByTeamId = parseFaabSpent(transData);
@@ -2127,6 +2167,14 @@ async function fetchESPNData() {
         const seasonTradesTotal = MANAGERS.reduce((s, m) => s + m.trades, 0);
         const wkTransTotal  = WK_TRANS.reduce((s, n) => s + n, 0);
         const wkTradesTotal = WK_TRADES.reduce((s, n) => s + n, 0);
+        // Entry 429 (C): trade cross-check — players received per manager (charged $2 each) next to ESPN's own
+        // trade counter, plus every trade found. Each trade's players received must balance (A gets N, B gets M).
+        if (TRADES_LOG.length || MANAGERS.some(m => (m.tradesESPN || 0) > 0)) {
+          console.info('[Trades] ' + TRADES_LOG.length + ' trade(s), ' + wkTradesTotal + ' player(s) received = $' + (wkTradesTotal * RULES.trade_fee) + ' in trade fees');
+          console.table(MANAGERS.filter(m => m.trades || m.tradesESPN).map(m => ({ manager: m.name, playersReceived: m.trades, fee: '$' + m.trades * RULES.trade_fee, espnTradeCounter: m.tradesESPN })));
+          TRADES_LOG.forEach(t => console.info('[Trades] WK ' + t.wk + ' ' + new Date(t.date).toLocaleString() + ': ' +
+            t.sides.map(sd => sd.team + ' gets ' + sd.playerIds.map(id => (PLAYER_NAME_MAP[id] || {}).name || ('#' + id)).join(', ')).join('  <->  ')));
+        }
         if (wkTransTotal !== seasonTransTotal || wkTradesTotal !== seasonTradesTotal) {
           console.warn(
             '[mTransactions2] Weekly sums do not match mTeam season totals — ' +
@@ -8313,6 +8361,45 @@ function renderFAABChart(){
 // the column headers + TOTAL row stay pinned at the top and the projection row (Wks NN–17) at the bottom.
 // Desktop keeps showing every week. Height is measured from the real rows, so it works at any scale/rotation.
 const TX_VISIBLE_WEEKS = 6;
+// Entry 429 (S087): Trades table — one row per manager per trade, under the Transactions table (Hanh-approved
+// desktop preview). $2 per player received, charged to the receiving manager. Hidden until the first trade.
+function tradesTableHTML(){
+  if(!TRADES_LOG || !TRADES_LOG.length) return '';
+  const fee = RULES.trade_fee;
+  const ph = window.matchMedia('(max-width:820px)').matches;   // phones: no Date column (Week is enough; it crowded the turned panel)
+  const col = n => (Object.values(ESPN_ID_MAP).find(m=>m.name===n)||{}).color || 'var(--text)';
+  const dt = ms => ms ? new Date(ms).toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : '—';
+  const pl = id => { const p = PLAYER_NAME_MAP[id]; if(!p) return 'Player #'+id;
+    const tag = [PRO_TEAM_ABBR[p.proTeamId], POSITION_ABBR[p.positionId]].filter(Boolean).join(' ');
+    return p.name + (tag ? ' <span style="color:var(--text3);font-size:10px;">'+tag+'</span>' : ''); };
+  const rowsData = []; TRADES_LOG.forEach(t => t.sides.forEach(sd => rowsData.push({wk:t.wk, date:t.date, ...sd})));
+  const nP = rowsData.reduce((s,r)=>s+r.playerIds.length,0);
+  const R='text-align:right;', L='text-align:left;', M='color:var(--mustard);';
+  let rows = '<tr class="trd-total" style="background:var(--bg3);font-weight:700;border-bottom:2px solid var(--border);">'
+    +'<td style="text-align:center;font-size:10px;letter-spacing:0.06em;text-transform:uppercase;color:var(--text);">Total</td>'
+    +'<td style="'+L+'color:var(--text3);font-weight:400;">'+TRADES_LOG.length+' trade'+(TRADES_LOG.length===1?'':'s')+'</td>'+(ph?'':'<td></td>')+'<td></td><td></td>'
+    +'<td style="'+R+M+'">'+nP+'</td><td style="'+R+M+'">$'+(nP*fee).toFixed(2)+'</td></tr>';
+  rowsData.forEach(r => {
+    rows += '<tr class="trd-row">'
+      +'<td style="text-align:center;">WK '+String(r.wk).padStart(2,'0')+'</td>'
+      +(ph?'':'<td style="'+L+'color:var(--text3);white-space:nowrap;">'+dt(r.date)+'</td>')
+      +'<td style="'+L+'"><b style="color:'+col(r.team)+'">'+r.team+'</b></td>'
+      +'<td style="'+L+'">'+r.playerIds.map(pl).join('<br>')+'</td>'
+      +'<td style="'+L+'"><b style="color:'+col(r.from)+'">'+r.from+'</b></td>'
+      +'<td style="'+R+'">'+r.playerIds.length+'</td>'
+      +'<td style="'+R+M+'">$'+(r.playerIds.length*fee).toFixed(2)+'</td></tr>';
+  });
+  const th = (t,a) => '<th style="text-align:'+(a||'left')+';text-transform:uppercase;">'+t+'</th>';
+  return '<div style="font-size:10px;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text3);margin:20px 0 6px;">Trades</div>'
+    +'<div style="font-size:11px;color:var(--text3);margin-bottom:10px;">One row per manager per trade — $'+fee+' per player received, charged to the receiving manager.</div>'
+    +'<div class="trd-tbl-wrap" style="border:1px solid var(--border);border-radius:var(--r-lg);overflow:hidden;">'
+    +'<table class="ptbl" style="width:100%;font-size:12px;font-variant-numeric:tabular-nums;">'
+    +(ph?'<colgroup><col style="width:13%"><col style="width:15%"><col style="width:38%"><col style="width:14%"><col style="width:9%"><col style="width:11%"></colgroup>':'')   // phones: room for player names
+    +'<thead><tr>'
+    +th('Week','center')+(ph?'':th('Date'))+th('Manager')+th('Received')+th('From')+th('Players','right')+th('Trade Fee','right')
+    +'</tr></thead><tbody>'+rows+'</tbody></table></div>';
+}
+
 function txLimitWeeksOnPhone(el) {
   const wrap = el.querySelector('.tx-tbl-wrap'); if (!wrap) return;
   if (!window.matchMedia('(max-width:820px)').matches) return;
@@ -8438,7 +8525,7 @@ function renderTransactions(){
     +thead+'<tbody>'+rows+'</tbody>'
     +'</table></div>';
 
-  el.innerHTML = projCard + tableHTML;
+  el.innerHTML = projCard + tableHTML + tradesTableHTML();   // Entry 429: Trades table under the weekly table
   txLimitWeeksOnPhone(el);   // Entry 401
   el.querySelectorAll('.trans-count-hover').forEach(td=>{
     const wk = Number(td.dataset.wk);
