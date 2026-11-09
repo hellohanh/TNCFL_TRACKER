@@ -854,6 +854,10 @@ tfoot .grp-gap{background:var(--bg3)!important;}
   </div>
 
   <div id="tab-movement" style="display:none;">
+    <div class="mod" id="live-score-card" style="display:none;">   <!-- Entry 432 (S088, Hanh-approved preview): current week, current vs ESPN live projection -->
+      <div class="mod-label" id="live-score-label">Current week</div>
+      <div id="live-score-chart"></div>
+    </div>
     <div class="mod">
       <div class="mod-label">Weekly Movement — <span>All Weeks, newest first</span></div>
       <div id="movement-weeks"></div>
@@ -2457,7 +2461,7 @@ function showTab(id) {
   });
   if(id==='standings'){renderMoneyCircle();renderStandings();renderScoreGraph();renderDDB();renderDespair2();renderSpread2();renderSeasonBump();renderPBMC();}
   if(id==='transactions'){ renderFAABChart(); renderTransactions(); }
-  if(id==='movement') renderMovement();
+  if(id==='movement'){ renderMovement(); renderLiveScoreCard(); }   // Entry 432
   if(id==='hmotw'){   renderHMOTW(); renderPeak(); }
   if(id==='money')    renderMoney();
   if(id==='playoffs') renderPlayoffs();
@@ -2525,6 +2529,40 @@ async function refreshAllData(btn){
   } finally {
     if (btn) setTimeout(() => { if (btn && btn.isConnected) btn.style.animation = ''; }, 800);
   }
+}
+
+// Entry 432 (S088, Hanh-approved preview): current-week dumbbell — each manager's current score (filled dot) and ESPN's live
+// projected final (hollow ring, totalProjectedPointsLive via the Worker's /live-snapshot), joined by a line.
+// Ranked top to bottom by current score (ties: higher projection first).
+let LIVE_SCORES = null;   // { week, actual:{name:pts}, projected:{name:pts}, ts }
+function renderLiveScoreCard(){
+  const card = document.getElementById('live-score-card'), el = document.getElementById('live-score-chart');
+  if(!card || !el) return;
+  if(!LIVE_SCORES){ card.style.display = 'none'; return; }
+  card.style.display = '';
+  document.getElementById('live-score-label').innerHTML = 'Week '+String(LIVE_SCORES.week).padStart(2,'0')+' — <span>current score vs ESPN projected final</span>';
+  const rows = Object.values(ESPN_ID_MAP).map(m => ({ name:m.name, color:m.color,
+    cur: +(LIVE_SCORES.actual[m.name] || 0), proj: +(LIVE_SCORES.projected[m.name] || 0) }))
+    .sort((a,b) => (b.cur - a.cur) || (b.proj - a.proj));
+  const W = Math.max(320, el.clientWidth || 1100), ROW = 34, TOP = 30, BOT = 30, NAME_W = 84, VAL_W = 150;
+  const x0 = NAME_W + 14, x1 = W - VAL_W - 10, H = TOP + rows.length*ROW + BOT;
+  const all = rows.flatMap(r => [r.cur, r.proj]);
+  const lo = Math.max(0, Math.floor((Math.min(...all) - 5) / 25) * 25), hi = Math.ceil(Math.max(...all) * 1.05 / 5) * 5;
+  const X = v => x0 + (v - lo) / Math.max(1, hi - lo) * (x1 - x0);
+  let g = '';
+  for(let t = lo; t <= hi; t += 25){ const x = X(t);
+    g += '<line x1="'+x+'" y1="'+(TOP-8)+'" x2="'+x+'" y2="'+(H-BOT+4)+'" stroke="rgba(255,255,255,0.07)"/>'
+       + '<text x="'+x+'" y="'+(H-BOT+20)+'" text-anchor="middle" font-size="11" fill="var(--text3)">'+t+'</text>'; }
+  g += '<text x="'+x1+'" y="'+(TOP-14)+'" text-anchor="end" font-size="10" fill="var(--text3)" letter-spacing="0.06em">'
+     + '<tspan>●</tspan> CURRENT   <tspan>○</tspan> PROJECTED</text>';
+  rows.forEach((r,i) => { const y = TOP + i*ROW + ROW/2, xc = X(r.cur), xp = X(r.proj);
+    g += '<text x="'+NAME_W+'" y="'+(y+4)+'" text-anchor="end" font-size="13" font-weight="700" fill="'+r.color+'">'+r.name+'</text>'
+       + '<line x1="'+xc+'" y1="'+y+'" x2="'+xp+'" y2="'+y+'" stroke="'+r.color+'" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round"/>'
+       + '<circle cx="'+xp+'" cy="'+y+'" r="6.5" fill="var(--bg2)" stroke="'+r.color+'" stroke-width="2.5"/>'
+       + '<circle cx="'+xc+'" cy="'+y+'" r="7" fill="'+r.color+'"/>'
+       + '<text x="'+(x1+18)+'" y="'+(y+4)+'" font-size="12" fill="var(--text)" style="font-variant-numeric:tabular-nums">'
+       + '<tspan font-weight="700">'+r.cur.toFixed(2)+'</tspan><tspan fill="var(--text3)">  →  '+r.proj.toFixed(2)+'</tspan></text>'; });
+  el.innerHTML = '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;font-family:inherit;">'+g+'</svg>';
 }
 
 function renderMoneyCircle() {
@@ -3832,6 +3870,9 @@ async function refreshLiveMovementSnapshot(w, opts) {
     const idsInOrder = Object.keys(ESPN_ID_MAP).map(Number);
     const actualVals = idsInOrder.map(id => data.actual[ESPN_ID_MAP[id].name] ?? 0);
     const projVals    = idsInOrder.map(id => data.projected[ESPN_ID_MAP[id].name] ?? 0);
+    // Entry 432: current-week score card (current vs ESPN live projected final)
+    LIVE_SCORES = { week: CURRENT_WK, actual: data.actual || {}, projected: data.projected || {}, ts: Date.now() };
+    renderLiveScoreCard();
 
     const now = new Date();
     const actualForWk = MOV_DATA.actual[w] || [];
@@ -8784,6 +8825,7 @@ function renderFAActivity() {
 let _resizeTimer=null;
 window.addEventListener('resize',()=>{ clearTimeout(_resizeTimer); _resizeTimer=setTimeout(_onResizeRedraw,150); }); // Entry 350: debounced
 function _onResizeRedraw(){
+  if(!document.getElementById('tab-movement').style.display) renderLiveScoreCard();   // Entry 432
   if(!document.getElementById('tab-hmotw').style.display) renderPeak();
   if(!document.getElementById('tab-standings').style.display){
     renderSeasonBump();
