@@ -2544,7 +2544,7 @@ function renderLiveScoreCard(){
   const rows = Object.values(ESPN_ID_MAP).map(m => ({ name:m.name, color:m.color,
     cur: +(LIVE_SCORES.actual[m.name] || 0), proj: +(LIVE_SCORES.projected[m.name] || 0) }))
     .sort((a,b) => (b.cur - a.cur) || (b.proj - a.proj));
-  const W = Math.max(320, el.clientWidth || 1100), ROW = 34, TOP = 14, BOT = 30, NAME_W = 84, VAL_W = 150;
+  const W = Math.max(320, el.clientWidth || 1100), ROW = 27.2, TOP = 14,   /* Entry 435: rows 20% tighter (was 34) */ BOT = 30, NAME_W = 84, VAL_W = 150;
   const x0 = NAME_W + 14, x1 = W - VAL_W - 10, H = TOP + rows.length*ROW + BOT;
   const all = rows.flatMap(r => [r.cur, r.proj]);
   const lo = Math.max(0, Math.floor((Math.min(...all) - 5) / 25) * 25), hi = Math.ceil(Math.max(...all) * 1.05 / 5) * 5;
