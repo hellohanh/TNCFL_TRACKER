@@ -2544,7 +2544,7 @@ function renderLiveScoreCard(){
   const rows = Object.values(ESPN_ID_MAP).map(m => ({ name:m.name, color:m.color,
     cur: +(LIVE_SCORES.actual[m.name] || 0), proj: +(LIVE_SCORES.projected[m.name] || 0) }))
     .sort((a,b) => (b.cur - a.cur) || (b.proj - a.proj));
-  const W = Math.max(320, el.clientWidth || 1100), ROW = 34, TOP = 30, BOT = 30, NAME_W = 84, VAL_W = 150;
+  const W = Math.max(320, el.clientWidth || 1100), ROW = 34, TOP = 14, BOT = 30, NAME_W = 84, VAL_W = 150;
   const x0 = NAME_W + 14, x1 = W - VAL_W - 10, H = TOP + rows.length*ROW + BOT;
   const all = rows.flatMap(r => [r.cur, r.proj]);
   const lo = Math.max(0, Math.floor((Math.min(...all) - 5) / 25) * 25), hi = Math.ceil(Math.max(...all) * 1.05 / 5) * 5;
@@ -2553,8 +2553,6 @@ function renderLiveScoreCard(){
   for(let t = lo; t <= hi; t += 25){ const x = X(t);
     g += '<line x1="'+x+'" y1="'+(TOP-8)+'" x2="'+x+'" y2="'+(H-BOT+4)+'" stroke="rgba(255,255,255,0.07)"/>'
        + '<text x="'+x+'" y="'+(H-BOT+20)+'" text-anchor="middle" font-size="11" fill="var(--text3)">'+t+'</text>'; }
-  g += '<text x="'+x1+'" y="'+(TOP-14)+'" text-anchor="end" font-size="10" fill="var(--text3)" letter-spacing="0.06em">'
-     + '<tspan>●</tspan> CURRENT   <tspan>○</tspan> PROJECTED</text>';
   rows.forEach((r,i) => { const y = TOP + i*ROW + ROW/2, xc = X(r.cur), xp = X(r.proj);
     g += '<text x="'+NAME_W+'" y="'+(y+4)+'" text-anchor="end" font-size="13" font-weight="700" fill="'+r.color+'">'+r.name+'</text>'
        + '<line x1="'+xc+'" y1="'+y+'" x2="'+xp+'" y2="'+y+'" stroke="'+r.color+'" stroke-opacity="0.55" stroke-width="3" stroke-linecap="round"/>'
@@ -2562,7 +2560,22 @@ function renderLiveScoreCard(){
        + '<circle cx="'+xc+'" cy="'+y+'" r="7" fill="'+r.color+'"/>'
        + '<text x="'+(x1+18)+'" y="'+(y+4)+'" font-size="12" fill="var(--text)" style="font-variant-numeric:tabular-nums">'
        + '<tspan font-weight="700">'+r.cur.toFixed(2)+'</tspan><tspan fill="var(--text3)">  →  '+r.proj.toFixed(2)+'</tspan></text>'; });
-  el.innerHTML = '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;font-family:inherit;">'+g+'</svg>';
+  // Entry 433: legend + Live Snapshot chip (refreshes the whole Weekly Movement tab) above the chart
+  const head = '<div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin:0 0 2px;">'
+    + '<span style="font-size:10px;color:var(--text3);letter-spacing:0.06em;">● CURRENT&nbsp;&nbsp;○ PROJECTED</span>'
+    + '<button class="mov-snap-btn" id="live-score-snap" onclick="liveScoreRefreshTab()" title="Pull a live snapshot and refresh the whole Weekly Movement tab">'
+    + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg>'
+    + '<span>Live Snapshot</span></button></div>';
+  el.innerHTML = head + '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="display:block;font-family:inherit;">'+g+'</svg>';
+}
+// Entry 433 (S088): the chip pulls a fresh live snapshot (force — bypasses the Worker's short cache, same as the
+// week card's Live Snapshot button) and re-renders the whole Weekly Movement tab.
+async function liveScoreRefreshTab(){
+  const chip = document.getElementById('live-score-snap');
+  if(chip){ chip.disabled = true; chip.querySelector('span').textContent = 'Pulling…'; }
+  try { await refreshLiveMovementSnapshot(CURRENT_WK - 1); }
+  catch(e){ console.warn('[Live score] refresh failed', e); }
+  finally { renderMovement(); renderLiveScoreCard(); }
 }
 
 function renderMoneyCircle() {
