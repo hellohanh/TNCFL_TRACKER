@@ -6463,7 +6463,7 @@ const THEME_BANK = [
   'Stranger Things','Friends','The Office','Lord of the Rings','The Sopranos','Seinfeld',
   'Peaky Blinders','Dune','The Boys','Cobra Kai','Anchorman',"Ocean's Eleven",'Yellowstone','300',
 ];
-const THEMES_USED_2026 = ['Top Gun', 'Rocky', 'John Wick', 'Cobra Kai', 'The Hunger Games', 'Hercules', 'The Office', 'Moneyball']; // Wk1 Top Gun; Wk2 Rocky; Wk3 John Wick; Wk4 Cobra Kai; Wk5 The Hunger Games; Wk6 Hercules (commissioner's own theme); Wk7 The Office; Wk8 Moneyball (commissioner's own theme)
+const THEMES_USED_2026 = ['Top Gun', 'Rocky', 'John Wick', 'Cobra Kai', 'The Hunger Games', 'Hercules', 'The Office', 'Moneyball', 'Stranger Things']; // Wk1 Top Gun; Wk2 Rocky; Wk3 John Wick; Wk4 Cobra Kai; Wk5 The Hunger Games; Wk6 Hercules (commissioner's own theme); Wk7 The Office; Wk8 Moneyball (commissioner's own theme); Wk9 Stranger Things
 
 // Storyline → curated theme fit (Entry 258). This is a first-pass creative
 // judgment call, not a computed/objective mapping — Hanh should feel free
@@ -6573,7 +6573,8 @@ function formatRecapStandingsBlock(wk) {
   const talStr = t => Number.isInteger(t) ? String(t) : t.toFixed(1);
   const lines = rows.map((r, i) => {
     const transWord = r.trans === 1 ? 'tran' : 'trans';
-    const body = `${r.points.toFixed(2)} points, 0 players received, ${r.trans} ${transWord} and ${talStr(r.tal)} HMOTW; ${r.net < 0 ? '-' : ''}$${Math.abs(r.net).toFixed(2)}`;
+    // S089: players received was hardcoded "0"; now the real count (r.trades = players received, Entry 429).
+    const body = `${r.points.toFixed(2)} points, ${r.trades} player${r.trades === 1 ? '' : 's'} received, ${r.trans} ${transWord} and ${talStr(r.tal)} HMOTW; ${r.net < 0 ? '-' : ''}$${Math.abs(r.net).toFixed(2)}`;
     return i < 4
       ? `In ${ord(i+1)} place is ${r.name} with ${body}`
       : `${r.name} has ${body}`;
@@ -7055,7 +7056,58 @@ In 4th place is <b style="color:#E09E06">Kito</b> with <b>1237.72</b> points, 0 
 <b style="color:#6161F5">Randy</b> has <b>1133.94</b> points, 0 players received, 5 trans and 0 HMOTW; <b>-$530.00</b><br>
 <b style="color:#4AACED">D'lyn</b> has <b>1021.52</b> points, 0 players received, 13 trans and 0 HMOTW; <b>-$546.00</b></p>`,
   },
-  // Week 9 recap goes here after next lock session
+  // Entry 436 (S089): Week 9 recap (Stranger Things) wired from Hanh's edited docx.
+  {
+    week: 9,
+    label: '',
+    title: 'Week 9',
+    body: `<p>🔦 Something's wrong in Hawkins. The lights are flickering, the walkie-talkies are crackling, and somewhere under the high school bleachers there's a gate nobody remembers opening. Week 9's HMOTW belongs to <b style="color:#2EEAEA">Kevin</b> at <b>176.14</b>, the highest score of the week, and with it <b style="color:#2EEAEA">Kevin</b> snaps a <b>20</b>-week HMOTW drought. Twenty weeks gone, like Will Byers on the ride home from Dungeons & Dragons. His last HMOTW came in Week 6 of 2025. This week he crawled out of the Upside Down. And it happened right on the halfway mark: <b>9</b> weeks down, <b>9</b> to go.</p>
+
+<p>🧇 <b style="color:#2EEAEA">Kevin</b> beat his own ESPN projection by <b>18.44</b> (<b>157.70</b> projected, <b>176.14</b> final). Ja'Marr Chase led the way with <b>31.50</b>, Brock Purdy added <b>29.28</b> and Bucky Irving <b>28.50</b>. The surprise was the kicker: Cam Little, projected for <b>8.20</b>, kicked his way to <b>17.00</b>, more than double. That <b>8.80</b>-point bonus covered nearly half of <b style="color:#2EEAEA">Kevin</b>'s beat. Somebody hand the man an Eggo.</p>
+
+<p>😱 And it was close. <b style="color:#FF9900">Hanh</b> finished second at <b>174.80</b>, just <b>1.34</b> points short of the crown. But the consolation prize is the one <b style="color:#FF9900">Hanh</b> has been chasing all season: he climbed <b>2</b> spots to <b>#3</b> and into the money circle for the first time in 2026. Last week the question was "if he wins this much, why isn't he in the money?" This week he answered it. Only one manager had ever posted a <b>5.0</b> tally and never cracked the top 4, <b style="color:#05E632">Damian</b> in 2021. <b style="color:#FF9900">Hanh</b> just left that club. He sits <b>4.10</b> points above <b style="color:#F54747">Tony</b> at #4 and <b>5.38</b> behind <b style="color:#F943D5">Tim</b> at #2, and his <b>-$46</b> is still the best balance on the board by <b>$302</b>.</p>
+
+<p>👑 Up top, <b style="color:#05E632">Damian</b>'s season is running in the Upside Down. His lead over 2nd place grew from <b>61.82</b> to <b>96.82</b>, the biggest lead of the season. He has now held 1st for <b>8</b> straight weeks, every week since Week 2, without a single HMOTW. That ties <b style="color:#6161F5">Randy</b>'s <b>8</b> weeks in 2018; only <b style="color:#F54747">Tony</b>'s <b>10</b> in 2022 is longer. One more week and he passes <b style="color:#6161F5">Randy</b>; three more and he passes <b style="color:#F54747">Tony</b>. And the crown slipped past him again: <b>168.22</b>, the third-best score of the week, <b>7.92</b> short. That's three straight weeks within 8 points: <b>6.40</b>, then <b>4.30</b>, now <b>7.92</b>. The biggest lead in the league, and a <b>14</b>-week HMOTW drought, the second-longest active.</p>
+
+<p>🔄 Behind him, the party line got scrambled. <b style="color:#F943D5">Tim</b> took back 2nd from <b style="color:#F54747">Tony</b> despite a modest <b>134.00</b>, sixth-best this week, and now leads him by <b>9.48</b>. <b style="color:#F54747">Tony</b> dropped <b>2</b> spots to <b>#4</b> on <b>123.74</b>, the third-lowest score of the week, but still holds the last money spot, <b>28.92</b> clear of <b style="color:#E09E06">Kito</b>. <b style="color:#E09E06">Kito</b> fell <b>1</b> spot to <b>#5</b> and out of the money on <b>130.86</b>. <b style="color:#B964F2">Ted</b> holds <b>#6</b> on <b>148.82</b>. <b style="color:#AED709">Aidan</b> stays <b>#7</b> after <b>163.24</b>, the fourth-best score of the week, and <b style="color:#2EEAEA">Kevin</b>'s win left him at <b>#8</b>, just <b>0.92</b> behind <b style="color:#AED709">Aidan</b>. <b style="color:#6161F5">Randy</b> holds <b>#9</b> on <b>117.08</b>, the second-lowest score, and <b style="color:#4AACED">D'lyn</b> stays <b>#10</b> on <b>96.18</b>, the only score under 100.</p>
+
+<p>🗺️ Halfway through the season, here's the map of Hawkins. <b style="color:#05E632">Damian</b> stands alone at the top, <b>96.82</b> points clear of everyone. Then a three-way knot: <b style="color:#F943D5">Tim</b>, <b style="color:#FF9900">Hanh</b> and <b style="color:#F54747">Tony</b>, all within <b>9.48</b> points, with the money line running under <b style="color:#F54747">Tony</b>. Below it, <b style="color:#E09E06">Kito</b> and <b style="color:#B964F2">Ted</b> sit <b>4.88</b> apart, <b>28.92</b> back of the money. Then <b style="color:#AED709">Aidan</b> and <b style="color:#2EEAEA">Kevin</b>, less than a point apart and just under the league average. A big drop to <b style="color:#6161F5">Randy</b>, and a bigger one to <b style="color:#4AACED">D'lyn</b> at the foot of the map. The league averaged <b>143.31</b> this week.</p>
+
+<p>🤝 And we have our first trade of the season. On Thursday, <b style="color:#AED709">Aidan</b> and <b style="color:#B964F2">Ted</b> swapped two players apiece: <b style="color:#B964F2">Ted</b> received Justin Herbert and Bijan Robinson; <b style="color:#AED709">Aidan</b> received Trevor Lawrence and Jonah Coleman. Each side came away with a quarterback, and at <b>$2</b> per player received, that's <b>$4</b> apiece and <b>$8</b> in trade fees. One footnote for the lab: Bijan Robinson was the player who delivered <b style="color:#AED709">Aidan</b>'s Week 4 HMOTW, his only one this season. <b style="color:#AED709">Aidan</b> just sent the man who opened his gate to <b style="color:#B964F2">Ted</b>.</p>
+
+<p>📻 We now have the start of the quarterback scramble, and Week 9 is where it began. In a league that starts two QBs, <b>6</b> of this week's <b>16</b> adds were quarterbacks. <b style="color:#AED709">Aidan</b> won Gardner Minshew II with a <b>$550</b> waiver bid, beating <b style="color:#E09E06">Kito</b> (<b>$452</b>) and <b style="color:#6161F5">Randy</b> (<b>$323</b>). <b style="color:#6161F5">Randy</b> took Jacoby Brissett for <b>$523</b>, beating <b style="color:#E09E06">Kito</b> (<b>$450</b>) and <b style="color:#AED709">Aidan</b> (<b>$14</b>), and added Joe Fagnano for <b>$160</b>: <b>$683</b> on two quarterbacks in one week. <b style="color:#E09E06">Kito</b> landed Joe Milton for <b>$250</b>, over <b style="color:#F943D5">Tim</b> (<b>$70</b>) and <b style="color:#AED709">Aidan</b> (<b>$14</b>). On the free-agent side, <b style="color:#B964F2">Ted</b> picked up Drew Lock and <b style="color:#4AACED">D'lyn</b> added Carson Wentz, the same Wentz <b style="color:#AED709">Aidan</b> paid <b>$200</b> for back in Week 2. <b style="color:#4AACED">D'lyn</b> got him for nothing. <b style="color:#E09E06">Kito</b> chased all three of the big names and came away with one.</p>
+
+<p>🚲 And that leaves <b style="color:#E09E06">Kito</b> on his bike in the dark woods with one flashlight. He has three quarterbacks on his roster, and only one of them can play in Week 10. Sam Darnold is out. Joe Milton, the <b>$250</b> pickup, is on bye. That leaves Patrick Mahomes, and even Mahomes is listed as questionable. In a league that starts two QBs, <b style="color:#E09E06">Kito</b> is one rough tackle away from having no quarterback at all. And the rest of the party isn't sharing walkie-talkies. <b style="color:#4AACED">D'lyn</b> is sitting on <b>6</b> quarterbacks (three of them hurt: Lamar Jackson on IR, Deshaun Watson and Kyler Murray out), <b style="color:#2EEAEA">Kevin</b> and <b style="color:#B964F2">Ted</b> have <b>5</b> each, and <b style="color:#6161F5">Randy</b> has <b>4</b>. That's <b>20</b> quarterbacks on four rosters while <b style="color:#E09E06">Kito</b> prays over one. Never go into the Upside Down alone.</p>
+
+<p>🏜️ With <b style="color:#2EEAEA">Kevin</b> out of the woods, someone else inherits the dark. <b style="color:#6161F5">Randy</b> now holds the longest active HMOTW drought: <b>17</b> weeks and counting, his last win coming in Week 10 of 2025. He spent <b>$683</b> on quarterbacks this week and scored <b>117.08</b>. Somebody string up the Christmas lights for <b style="color:#6161F5">Randy</b>, because nothing's spelling out his name yet.</p>
+
+<p>💰 And the Double HMOTW stays in the Upside Down. <b style="color:#2EEAEA">Kevin</b>'s <b>176.14</b> fell short of 200, so this one is a regular HMOTW: <b>$10</b> per manager and a <b>$100</b> pot, not <b>$20</b> and <b>$200</b>. That's <b>4</b> Double HMOTW weeks out of <b>9</b>, and none since Week 5: four straight regular weeks, the longest breather of the season.</p>
+
+<p>💸 On the wire, <b>16</b> transactions this week, up from <b>13</b>. <b style="color:#AED709">Aidan</b> led with <b>4</b>; <b style="color:#6161F5">Randy</b> had <b>3</b>, <b style="color:#F943D5">Tim</b> and <b style="color:#B964F2">Ted</b> had <b>2</b>, and <b style="color:#05E632">Damian</b>, <b style="color:#FF9900">Hanh</b>, <b style="color:#2EEAEA">Kevin</b>, <b style="color:#E09E06">Kito</b> and <b style="color:#4AACED">D'lyn</b> had <b>1</b> each. <b style="color:#F54747">Tony</b> was the only manager with none. At <b>$2</b> a move, that's <b>$32</b> for the week and <b>$254</b> for the season, <b>127</b> transactions so far, plus <b>$8</b> in trade fees on <b>4</b> players received. At the current pace, the season is on track for roughly <b>$508</b> in transaction fees by the end of Week 18, a projection that ticked up from last week's <b>$500</b>.</p>
+
+<p>🔔 Week 10 is next, and the second half starts with the lights flickering. Can <b style="color:#E09E06">Kito</b> find a second quarterback before kickoff? Can <b style="color:#FF9900">Hanh</b> stay in the money circle now that he's finally in it? Does <b style="color:#05E632">Damian</b> win his first HMOTW, or does he pass <b style="color:#6161F5">Randy</b>'s 8-week run and close in on <b style="color:#F54747">Tony</b>'s 10? Can <b style="color:#2EEAEA">Kevin</b> make it two in a row? Will <b style="color:#6161F5">Randy</b> find water before 17 becomes 18? Will the Double HMOTW come back after four weeks off? And <b style="color:#6161F5">Randy</b> still leads the jersey bet <b>1-0</b>, with the Week 15 rematch six weeks out. Friends don't lie, and neither do the numbers.</p>
+
+<p>📋 <b>To the numbers, to the wall.</b><br>
+If the season were to end today, this will be the results:</p>
+
+<p>Total number of transactions: <b>127</b><br>
+Total number of players traded: <b>4</b><br>
+Total number of double HMOTW: <b>4</b></p>
+
+<p style="color:var(--text3);font-size:11px;">Amounts owed/won below include all transactions, side, playoff, and Super Bowl bets.</p>
+
+<p>In 1st place is <b style="color:#05E632">Damian</b> with <b>1503.80</b> points, 0 players received, 9 trans and 0 HMOTW; <b>-$538.00</b><br>
+In 2nd place is <b style="color:#F943D5">Tim</b> with <b>1406.98</b> points, 0 players received, 14 trans and 2 HMOTW; <b>-$348.00</b><br>
+In 3rd place is <b style="color:#FF9900">Hanh</b> with <b>1401.60</b> points, 0 players received, 13 trans and 5 HMOTW; <b>-$46.00</b><br>
+In 4th place is <b style="color:#F54747">Tony</b> with <b>1397.50</b> points, 0 players received, 7 trans and 0 HMOTW; <b>-$534.00</b><br>
+<b style="color:#E09E06">Kito</b> has <b>1368.58</b> points, 0 players received, 18 trans and 2 HMOTW; <b>-$356.00</b><br>
+<b style="color:#B964F2">Ted</b> has <b>1363.70</b> points, 2 players received, 17 trans and 2 HMOTW; <b>-$358.00</b><br>
+<b style="color:#AED709">Aidan</b> has <b>1344.82</b> points, 2 players received, 22 trans and 1 HMOTW; <b>-$468.00</b><br>
+<b style="color:#2EEAEA">Kevin</b> has <b>1343.90</b> points, 0 players received, 5 trans and 1 HMOTW; <b>-$430.00</b><br>
+<b style="color:#6161F5">Randy</b> has <b>1251.02</b> points, 0 players received, 8 trans and 0 HMOTW; <b>-$536.00</b><br>
+<b style="color:#4AACED">D'lyn</b> has <b>1117.70</b> points, 0 players received, 14 trans and 0 HMOTW; <b>-$548.00</b></p>`,
+  },
+  // Week 10 recap goes here after next lock session
   // ... and so on through Week 18
 ];
 
