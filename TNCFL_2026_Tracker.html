@@ -2534,7 +2534,10 @@ async function refreshAllData(btn){
 // Entry 432 (S088, Hanh-approved preview): current-week dumbbell — each manager's current score (filled dot) and ESPN's live
 // projected final (hollow ring, totalProjectedPointsLive via the Worker's /live-snapshot), joined by a line.
 // Ranked top to bottom by current score (ties: higher projection first).
-let LIVE_SCORES = null;   // { week, actual:{name:pts}, projected:{name:pts}, ts }
+let LIVE_SCORES = null;
+// Entry 438 (S089): sort toggle — 'cur' (default) or 'proj'; remembered per viewer (localStorage, best effort).
+let LIVE_SCORE_SORT = (() => { try { return localStorage.getItem('tncfl-live-sort') === 'proj' ? 'proj' : 'cur'; } catch(e){ return 'cur'; } })();
+function setLiveScoreSort(v){ LIVE_SCORE_SORT = v === 'proj' ? 'proj' : 'cur'; try { localStorage.setItem('tncfl-live-sort', LIVE_SCORE_SORT); } catch(e){} renderLiveScoreCard(); }   // { week, actual:{name:pts}, projected:{name:pts}, ts }
 function renderLiveScoreCard(){
   const card = document.getElementById('live-score-card'), el = document.getElementById('live-score-chart');
   if(!card || !el) return;
@@ -2543,7 +2546,9 @@ function renderLiveScoreCard(){
   document.getElementById('live-score-label').innerHTML = 'Week '+String(LIVE_SCORES.week).padStart(2,'0')+' — <span>current score vs ESPN projected final</span>';
   const rows = Object.values(ESPN_ID_MAP).map(m => ({ name:m.name, color:m.color,
     cur: +(LIVE_SCORES.actual[m.name] || 0), proj: +(LIVE_SCORES.projected[m.name] || 0) }))
-    .sort((a,b) => (b.cur - a.cur) || (b.proj - a.proj));
+    .sort(LIVE_SCORE_SORT === 'proj'
+      ? (a,b) => (b.proj - a.proj) || (b.cur - a.cur)     // Entry 438: sort by projected (ties: higher current)
+      : (a,b) => (b.cur - a.cur) || (b.proj - a.proj));   // default: current (ties: higher projection)
   const W = Math.max(320, el.clientWidth || 1100), ROW = 27.2, TOP = 14,   /* Entry 435: rows 20% tighter (was 34) */ BOT = 30, NAME_W = 84, VAL_W = 150;
   const x0 = NAME_W + 14, x1 = W - VAL_W - 10, H = TOP + rows.length*ROW + BOT;
   const all = rows.flatMap(r => [r.cur, r.proj]);
@@ -2562,8 +2567,14 @@ function renderLiveScoreCard(){
        + '<text x="'+(x1+18)+'" y="'+(y+4)+'" font-size="12" fill="var(--text)" style="font-variant-numeric:tabular-nums">'
        + '<tspan font-weight="700">'+r.cur.toFixed(2)+'</tspan><tspan fill="var(--text3)">  →  '+r.proj.toFixed(2)+'</tspan></text>'; });
   // Entry 433: legend + Live Snapshot chip (refreshes the whole Weekly Movement tab) above the chart
-  const head = '<div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin:0 0 2px;">'
-    + '<span style="font-size:10px;color:var(--text3);letter-spacing:0.06em;">● CURRENT&nbsp;&nbsp;○ PROJECTED</span>'
+  const segBtn = (v, label) => '<button onclick="setLiveScoreSort(\''+v+'\')" style="font:inherit;font-size:10.5px;font-weight:700;letter-spacing:0.04em;padding:3px 10px;border:0;cursor:pointer;'
+    + (LIVE_SCORE_SORT === v ? 'background:var(--mustard);color:#111;' : 'background:transparent;color:var(--text3);') + '">'+label+'</button>';
+  const sortSeg = '<span style="display:inline-flex;align-items:center;gap:8px;">'   // Entry 438: sort toggle, left of the Live Snapshot chip (Hanh)
+    + '<span style="font-size:10px;color:var(--text3);letter-spacing:0.06em;">SORT BY</span>'
+    + '<span style="display:inline-flex;border:1px solid rgba(217,165,33,0.45);border-radius:999px;overflow:hidden;">'
+    + segBtn('cur','Current') + segBtn('proj','Projected') + '</span></span>';
+  const head = '<div style="display:flex;justify-content:flex-end;align-items:center;gap:12px;margin:0 0 2px;flex-wrap:wrap;">'
+    + '<span style="font-size:10px;color:var(--text3);letter-spacing:0.06em;">● CURRENT&nbsp;&nbsp;○ PROJECTED</span>' + sortSeg
     + '<button class="mov-snap-btn" id="live-score-snap" onclick="liveScoreRefreshTab()" title="Pull a live snapshot and refresh the whole Weekly Movement tab">'
     + '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 8h3l2-3h8l2 3h3v11H3z"/><circle cx="12" cy="13" r="3.2"/></svg>'
     + '<span>Live Snapshot</span></button></div>';
