@@ -2876,10 +2876,13 @@ const WK_COLORS = [
 
 // ── SCOREBOARD GRAPH (horizontal bar chart) ───────────────────────────────
 // One stacked bar per manager. Each week appends a new colored segment.
-// X-axis window:
-//   - Before 750 threshold: 0 → roundUp50(maxCum), fills full plot width
-//   - After 750 threshold:  sliding 750-wide window, xMin=roundUp50(maxCum)-750, xMax=roundUp50(maxCum)
+// X-axis window (Entry 443): anchored on the leader's total label, whose right
+// end sits 100 screen px in from the chart's right edge.
+//   - Until the visible range would exceed 750: xMin = 0, range stretched so the
+//     leader's bar ends at that anchor.
+//   - After that: 750-wide window, xMin = leader - (anchor fraction * 750).
 //     Early-segment bars that fall before xMin are clipped by SVG clipPath.
+// The axis line and tick labels run to the chart's right edge (past xMax).
 // Each weekly avg line is draggable; bounces back on release.
 function renderScoreGraph() {
   const wrap = document.getElementById('sg-wrap');
@@ -2919,16 +2922,29 @@ function renderScoreGraph() {
   // nearest 50" (which left a huge dead zone early in the season when
   // scores are still low, same class of issue as the old Despair
   // Differential fixed-50-floor bug from Entry 167).
-  const xMax = Math.round((maxCum * 1.10) / 10) * 10;
-  const WINDOW = 750;
-  const windowed = xMax > WINDOW;
-  const xMin = windowed ? xMax - WINDOW : 0;
-  const xRange = windowed ? WINDOW : xMax; // visible range width in data units
-
   const BAR_H = 14, ROW_GAP = 8, ROW_H = BAR_H + ROW_GAP;
   const PAD_L = 56, PAD_R = 64, PAD_T = 30, PAD_B = 30;
   const n = MANAGERS.length;
   const svgW = 720, plotW = svgW - PAD_L - PAD_R;
+
+  // Entry 443: the window is anchored on the LEADER'S TOTAL LABEL. Its right
+  // end sits 100 screen px in from the chart's right edge; the leader's bar
+  // end (label start - 6) is placed there and the axis is scaled to fit.
+  // Window width stays 750 points once totals pass that (left side clips).
+  const LEAD_GAP_PX = 100;
+  const wrapPx = wrap.clientWidth || 1160;
+  const leadGap = LEAD_GAP_PX * svgW / wrapPx;                 // px -> viewBox units
+  const mctx = document.createElement('canvas').getContext('2d');
+  mctx.font = '800 11px Segoe UI,sans-serif';
+  const leadLblW = mctx.measureText(maxCum.toFixed(2)).width;
+  const leadX = svgW - leadGap - leadLblW - 6;                  // leader's bar end
+  const leadFrac = (leadX - PAD_L) / plotW;
+  const WINDOW = 750;
+  const fullRange = maxCum / leadFrac;
+  const windowed = fullRange > WINDOW;
+  const xRange = windowed ? WINDOW : fullRange; // visible range width in data units
+  const xMin = windowed ? maxCum - leadFrac * WINDOW : 0;
+  const xMax = xMin + xRange;
   const svgH = n * ROW_H + PAD_T + PAD_B;
 
   // Map a data value to SVG x coordinate within the visible window
@@ -3076,15 +3092,18 @@ function renderScoreGraph() {
   // X axis ticks
   const tickStep = xRange <= 300 ? 50 : xRange <= 600 ? 100 : 150;
   const firstTick = Math.ceil(xMin/tickStep)*tickStep;
-  for(let v=firstTick; v<=xMax; v+=tickStep){
+  // Entry 443: axis runs to the chart's right edge (through PAD_R), so ticks
+  // continue past xMax; a tick is kept only if its label fits inside svgW.
+  const axisEnd = xMin + (svgW - PAD_L) / plotW * xRange;
+  for(let v=firstTick; v<=axisEnd; v+=tickStep){
     const x = xOf(v);
-    if(x < PAD_L || x > PAD_L+plotW) continue;
+    if(x < PAD_L || x > svgW - 12) continue;
     out += `<line x1="${x.toFixed(1)}" x2="${x.toFixed(1)}" y1="${PAD_T+n*ROW_H}" y2="${PAD_T+n*ROW_H+4}" stroke="#444" stroke-width="1"/>`;
     out += `<text x="${x.toFixed(1)}" y="${PAD_T+n*ROW_H+14}" text-anchor="middle" font-size="8" fill="#555" font-family="Segoe UI,sans-serif">${Math.round(v)}</text>`;
   }
 
   // Baseline
-  out += `<line x1="${PAD_L}" x2="${PAD_L+plotW}" y1="${PAD_T+n*ROW_H}" y2="${PAD_T+n*ROW_H}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
+  out += `<line x1="${PAD_L}" x2="${svgW}" y1="${PAD_T+n*ROW_H}" y2="${PAD_T+n*ROW_H}" stroke="rgba(255,255,255,0.1)" stroke-width="1"/>`;
 
   // Cumulative avg line removed — weekly avg lines (draggable) cover this
 
