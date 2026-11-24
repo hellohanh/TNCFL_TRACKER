@@ -4969,7 +4969,7 @@ const RULES = {
   sidebet_participants: ['Hanh','Randy','Damian','Kevin','Kito',"D'lyn",'Ted','Aidan','Tony','Tim'], // all 10 in for 2026
   // Playoff pool: opt-in $50/participant (2020+). Participants TBD.
   playoff_buyin: 50,
-  playoff_participants: ['Hanh','Randy','Damian','Kevin','Kito',"D'lyn",'Ted','Aidan','Tony','Tim'], // fill in before season
+  playoff_participants: [], // Entry 444: nobody has opted in yet; add each manager's name as they opt in (fee applies from Week 11)
   payout_pct: [0.40, 0.30, 0.20, 0.10],
   dhmotw_threshold: 200, // score >= this triggers DHMOTW (2016+)
 };
@@ -6499,7 +6499,7 @@ const THEME_BANK = [
   'Stranger Things','Friends','The Office','Lord of the Rings','The Sopranos','Seinfeld',
   'Peaky Blinders','Dune','The Boys','Cobra Kai','Anchorman',"Ocean's Eleven",'Yellowstone','300',
 ];
-const THEMES_USED_2026 = ['Top Gun', 'Rocky', 'John Wick', 'Cobra Kai', 'The Hunger Games', 'Hercules', 'The Office', 'Moneyball', 'Stranger Things', 'Squid Game']; // Wk1 Top Gun; Wk2 Rocky; Wk3 John Wick; Wk4 Cobra Kai; Wk5 The Hunger Games; Wk6 Hercules (commissioner's own theme); Wk7 The Office; Wk8 Moneyball (commissioner's own theme); Wk9 Stranger Things; Wk10 Squid Game
+const THEMES_USED_2026 = ['Top Gun', 'Rocky', 'John Wick', 'Cobra Kai', 'The Hunger Games', 'Hercules', 'The Office', 'Moneyball', 'Stranger Things', 'Squid Game', 'G.I. Joe']; // Wk1 Top Gun; Wk2 Rocky; Wk3 John Wick; Wk4 Cobra Kai; Wk5 The Hunger Games; Wk6 Hercules (commissioner's own theme); Wk7 The Office; Wk8 Moneyball (commissioner's own theme); Wk9 Stranger Things; Wk10 Squid Game; Wk11 G.I. Joe
 
 // Storyline → curated theme fit (Entry 258). This is a first-pass creative
 // judgment call, not a computed/objective mapping — Hanh should feel free
@@ -7190,7 +7190,56 @@ In 4th place is <b style="color:#AED709">Aidan</b> with <b>1560.46</b> points, 2
 <b style="color:#6161F5">Randy</b> has <b>1363.22</b> points, 0 players received, 8 trans and 0 HMOTW; <b>-$546.00</b><br>
 <b style="color:#4AACED">D'lyn</b> has <b>1249.48</b> points, 0 players received, 15 trans and 0 HMOTW; <b>-$560.00</b></p>`,
   },
-  // Week 11 recap goes here after next lock session
+  // Entry 445 (S093): Week 11 recap (G.I. Joe) wired from the approved draft (Hanh's edits + playoff fee removed).
+  {
+    week: 11,
+    label: '',
+    title: 'Week 11',
+    body: `<p>🐍 COBRA! The siren is wailing, the hooded troops are pouring out of Cobra Island, and the man in the blue mask has finally stepped out from behind the command console. Week 11's HMOTW belongs to <b style="color:#05E632">Damian</b> at <b>223.56</b>, the highest score of the week by <b>63.88</b> points, and it's a DOUBLE HMOTW. It's his first HMOTW of the season, it snaps a 15-week HMOTW drought that dated back to Week 13 of last season, and it takes his season tally from 0 to <b>2.0</b> in one strike. Mr. Consistency spent ten weeks commanding from the shadows. This week he led the charge himself.</p>
+
+<p>📜 And he picked his favorite battlefield. <b style="color:#05E632">Damian</b>'s <b>223.56</b> is the 9th-highest single week in TNCFL history and the third-best of 2026, behind <b style="color:#FF9900">Hanh</b>'s <b>236.16</b> in Week 3 and <b style="color:#F943D5">Tim</b>'s <b>233.40</b> in Week 1. His career-best week, <b>233.60</b>, also came in Week 11, back in 2024. That's three HMOTW wins in Week 11 over the last five seasons: 2022, 2024 and now 2026. The win also flips the career ledger back. <b style="color:#FF9900">Hanh</b> passed him in Week 8, <b>38.5</b> to <b>37.5</b>. With this Double, <b style="color:#05E632">Damian</b> moves to <b>39.5</b> and retakes the career HMOTW tally lead.</p>
+
+<p>👑 Here is what the Cobra Commander's season looks like on the intel report. <b style="color:#05E632">Damian</b> has been #1 for 10 straight weeks, every week since Week 2. That's the longest run at #1 of his career (his previous best was 9 weeks in 2016), and it ties <b style="color:#F54747">Tony</b>'s 2022 run for the sixth-longest in league history. He has finished in the top 3 of the weekly scores in 8 of 11 weeks, beaten the league's weekly average in 9 of 11, and scored 160+ in 9 of 11. He averages <b>173.37</b> a week, <b>22.69</b> more than the league average of <b>150.68</b>, and his worst week all season was <b>122.78</b>. His run at #1 without an HMOTW ended at 9 weeks, one short of <b style="color:#F54747">Tony</b>'s 10 from 2022. He didn't tie the record. He ended it on his own terms.</p>
+
+<p>📈 And the lead is now a fortress. <b style="color:#05E632">Damian</b> sits <b>187.02</b> points clear of 2nd, up from <b>107.26</b> a week ago. That's a <b>79.76</b>-point jump in one week and the fifth straight week his lead has grown, starting from just <b>0.54</b> points after Week 6. His lead is now bigger than his own average week. In fifteen seasons of TNCFL, only one manager has come into Week 12 with a bigger lead: <b style="color:#6161F5">Randy</b> in 2014, at <b>251.00</b>, and he finished 1st. Next on the list are <b style="color:#AED709">Aidan</b> in 2025 (<b>145.36</b>, finished 1st) and <b style="color:#6161F5">Randy</b> in 2019 (<b>126.00</b>, finished 2nd). The Week 11 leader has finished 1st in 10 of 15 seasons, including the last six in a row. Knowing is half the battle. The other half is figuring out how to catch him.</p>
+
+<p>⚠️ The Joes do have one piece of hope in the file, and it's <b style="color:#6161F5">Randy</b> 2019. That year <b style="color:#6161F5">Randy</b> led by <b>190.00</b> points after Week 7, still led by <b>126.00</b> after Week 11, and still finished 2nd. Big leads have been lost in this league before. It just takes a whole team, and Cobra's math says there are only seven weeks left.</p>
+
+<p>⚔️ Behind him, the Joes regrouped. <b style="color:#AED709">Aidan</b> was the biggest riser, up 2 spots to #2 on <b>159.58</b>, the third-best score of the week. <b style="color:#F943D5">Tim</b> slid to #3 on <b>131.36</b>. And <b style="color:#FF9900">Hanh</b> is back in the money at #4: his <b>159.68</b> was the second-best score of the week, edging <b style="color:#AED709">Aidan</b> by <b>0.10</b>. That's three managers in <b>14.68</b> points for spots 2 through 4. The money line is drawn after <b style="color:#FF9900">Hanh</b>, and then next up is a <b>33.68</b>-point gap down to <b style="color:#F54747">Tony</b> at #5. <b style="color:#B964F2">Ted</b> is <b>0.70</b> behind <b style="color:#F54747">Tony</b> and <b style="color:#2EEAEA">Kevin</b> is <b>3.18</b> behind <b style="color:#B964F2">Ted</b>: three managers in <b>3.88</b> points chasing the line. Then another <b>33.08</b>-point gap down to <b style="color:#E09E06">Kito</b>, with <b style="color:#6161F5">Randy</b> and <b style="color:#4AACED">D'lyn</b> further back.</p>
+
+<p>💥 <b style="color:#B964F2">Ted</b> took the hardest hit. He dropped 3 spots, from #3 to #6, on <b>108.62</b>, the lowest score of the week, and fell out of the money after just one week inside it. <b style="color:#2EEAEA">Kevin</b> quietly climbed 1 spot to #7 on <b>156.98</b>, the fourth-best score of the week.</p>
+
+<p>🛠️ The armory was busy. Week 11 was a monster on the wire: 23 transactions, the most of any week this season (the old high was 21 in Week 4), and up from 13 a week ago. <b style="color:#E09E06">Kito</b> led the arms race with 6 moves; <b style="color:#AED709">Aidan</b>, <b style="color:#FF9900">Hanh</b> and <b style="color:#F54747">Tony</b> had 3 each; <b style="color:#05E632">Damian</b>, <b style="color:#F943D5">Tim</b> and <b style="color:#B964F2">Ted</b> had 2; <b style="color:#2EEAEA">Kevin</b> and <b style="color:#4AACED">D'lyn</b> had 1. <b style="color:#6161F5">Randy</b> was the only manager who sat it out. At <b>$2</b> a move, that's <b>$46</b> for the week and <b>$326</b> for the season, 163 transactions in all, plus <b>$8</b> in trade fees from the 4 players traded earlier in the season. The season is now on pace for roughly <b>$533</b> in transaction fees by the end of Week 18, up from last week's <b>$504</b>. Everyone is loading up for the playoffs.</p>
+
+<p>🎖️ Which brings us to the mission briefing. Per the Playoffs tab, it's time to ask: who's in for this year's playoffs? The playoffs are opt-in at <b>$50</b> per manager and open to all 10 managers. Seeding comes from the standings at the end of Week 13 if 9 or 10 managers are in, or Week 14 if 4 to 8 are in; if someone opts out, the seeds shift down to fill the gap. Every matchup is decided by the weekly fantasy score, not head-to-head record, and the higher score advances. Ties go to total season points. So, Joes and Cobras alike: are you in or out? Let the commissioner know.</p>
+
+<p>💰 And for the first time this season, Cobra Commander got paid. <b style="color:#05E632">Damian</b>'s Double is worth <b>$20</b> per manager and a <b>$200</b> pot, and his balance jumped <b>$186</b>, from <b>-$548</b> to <b>-$362</b>, the biggest swing of the week. He went from one of the worst balances in the league to the third-best. <b style="color:#FF9900">Hanh</b> still holds the best balance at <b>-$74</b>, <b>$226</b> ahead of <b style="color:#AED709">Aidan</b>'s <b>-$300</b>. No one has opted in to the playoff pool yet, so no playoff fees are in anyone's balance. That's 6 Double HMOTW weeks out of 11, and back-to-back Doubles for the first time since Weeks 2 and 3.</p>
+
+<p>🏜️ <b style="color:#6161F5">Randy</b> still holds the longest active HMOTW drought: 19 weeks and counting. <b style="color:#F54747">Tony</b>, <b style="color:#6161F5">Randy</b> and <b style="color:#4AACED">D'lyn</b> are now the only managers without an HMOTW in 2026.</p>
+
+<p>🔔 Week 12 is next, and the Joes have a lot to figure out. Can anyone put a dent in a <b>187.02</b>-point lead with seven weeks left? Can <b style="color:#05E632">Damian</b> stay at #1 all the way to Week 18, which would make 17 straight weeks and tie <b style="color:#FF9900">Hanh</b>'s 2020 season for the longest single-season run in league history? Can <b style="color:#FF9900">Hanh</b> hold the last money spot, just <b>2.24</b> points ahead of <b style="color:#F943D5">Tim</b>? Who breaks out of the three-way scrum of <b style="color:#F54747">Tony</b>, <b style="color:#B964F2">Ted</b> and <b style="color:#2EEAEA">Kevin</b>? Who's in for the playoffs? And will <b style="color:#6161F5">Randy</b> find water before 19 becomes 20? Now you know. And knowing is half the battle.</p>
+
+<p>📋 <b>To the numbers, to the wall.</b><br>
+If the season were to end today, this will be the results:</p>
+
+<p>Total number of transactions: <b>163</b><br>
+Total number of players traded: <b>4</b><br>
+Total number of double HMOTW: <b>6</b></p>
+
+<p style="color:var(--text3);font-size:11px;">Amounts owed/won below include all transactions, side, playoff, and Super Bowl bets.</p>
+
+<p>In 1st place is <b style="color:#05E632">Damian</b> with <b>1907.06</b> points, 0 players received, 11 trans and 2 HMOTW; <b>-$362.00</b><br>
+In 2nd place is <b style="color:#AED709">Aidan</b> with <b>1720.04</b> points, 2 players received, 28 trans and 3 HMOTW; <b>-$300.00</b><br>
+In 3rd place is <b style="color:#F943D5">Tim</b> with <b>1707.60</b> points, 0 players received, 17 trans and 2 HMOTW; <b>-$374.00</b><br>
+In 4th place is <b style="color:#FF9900">Hanh</b> with <b>1705.36</b> points, 0 players received, 17 trans and 5 HMOTW; <b>-$74.00</b><br>
+<b style="color:#F54747">Tony</b> has <b>1671.68</b> points, 0 players received, 12 trans and 0 HMOTW; <b>-$564.00</b><br>
+<b style="color:#B964F2">Ted</b> has <b>1670.98</b> points, 2 players received, 22 trans and 2 HMOTW; <b>-$388.00</b><br>
+<b style="color:#2EEAEA">Kevin</b> has <b>1667.80</b> points, 0 players received, 6 trans and 1 HMOTW; <b>-$452.00</b><br>
+<b style="color:#E09E06">Kito</b> has <b>1634.72</b> points, 0 players received, 26 trans and 2 HMOTW; <b>-$392.00</b><br>
+<b style="color:#6161F5">Randy</b> has <b>1495.28</b> points, 0 players received, 8 trans and 0 HMOTW; <b>-$556.00</b><br>
+<b style="color:#4AACED">D'lyn</b> has <b>1393.82</b> points, 0 players received, 16 trans and 0 HMOTW; <b>-$572.00</b></p>`,
+  },
+  // Week 12 recap goes here after next lock session
   // ... and so on through Week 18
 ];
 
